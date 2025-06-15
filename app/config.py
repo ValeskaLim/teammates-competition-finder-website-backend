@@ -9,3 +9,6 @@ class Config:
         f"@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+def log_database_uri(self):
+        print(f"Database URI: {self.SQLALCHEMY_DATABASE_URI}")
