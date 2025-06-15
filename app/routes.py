@@ -1,4 +1,3 @@
-# app/routes.py
 from flask import Blueprint, request, jsonify, render_template
 from app import db
 from app.models import User, Competition, UserCompetition, TeamInvitation
@@ -68,14 +67,12 @@ def create_user():
             'message': f'Error creating user: {str(e)}'
         }), 500
 
-# 2. SELECT - Get users by criteria (using POST for complex queries)
 @main.route('/api/users/search', methods=['POST'])
 def search_users():
     try:
         data = request.get_json()
         query = User.query
         
-        # Build dynamic query based on provided criteria
         if 'major' in data and data['major']:
             query = query.filter(User.major.ilike(f"%{data['major']}%"))
         
@@ -88,7 +85,6 @@ def search_users():
         if 'field_of_preference' in data and data['field_of_preference']:
             query = query.filter(User.field_of_preference.ilike(f"%{data['field_of_preference']}%"))
         
-        # Pagination
         page = data.get('page', 1)
         per_page = data.get('per_page', 10)
         
@@ -112,17 +108,11 @@ def search_users():
             'message': f'Error searching users: {str(e)}'
         }), 500
 
-# =============================================================================
-# COMPETITION ROUTES - POST METHODS
-# =============================================================================
-
-# 3. INSERT - Create new competition
 @main.route('/api/competitions/create', methods=['POST'])
 def create_competition():
     try:
         data = request.get_json()
         
-        # Parse date string to datetime object
         competition_date = datetime.fromisoformat(data['date'].replace('Z', ''))
         
         new_competition = Competition(
@@ -162,22 +152,18 @@ def create_competition():
             'message': f'Error creating competition: {str(e)}'
         }), 500
 
-# 4. SELECT - Get competitions by filters
 @main.route('/api/competitions/filter', methods=['POST'])
 def filter_competitions():
     try:
         data = request.get_json()
         query = Competition.query
         
-        # Filter by status
         if 'status' in data and data['status']:
             query = query.filter(Competition.status == data['status'])
         
-        # Filter by type
         if 'type' in data and data['type']:
             query = query.filter(Competition.type.ilike(f"%{data['type']}%"))
         
-        # Filter by date range
         if 'start_date' in data and data['start_date']:
             start_date = datetime.fromisoformat(data['start_date'].replace('Z', ''))
             query = query.filter(Competition.date >= start_date)
@@ -186,11 +172,9 @@ def filter_competitions():
             end_date = datetime.fromisoformat(data['end_date'].replace('Z', ''))
             query = query.filter(Competition.date <= end_date)
         
-        # Filter by available slots
         if 'available_slots_only' in data and data['available_slots_only']:
             query = query.filter(Competition.slot > 0)
         
-        # Order by date
         order_by = data.get('order_by', 'date')
         order_direction = data.get('order_direction', 'asc')
         
@@ -213,17 +197,11 @@ def filter_competitions():
             'message': f'Error filtering competitions: {str(e)}'
         }), 500
 
-# =============================================================================
-# USER COMPETITION ROUTES - POST METHODS
-# =============================================================================
-
-# 5. INSERT - Register user for competition
 @main.route('/api/user-competitions/register', methods=['POST'])
 def register_user_competition():
     try:
         data = request.get_json()
         
-        # Check if user already registered for this competition
         existing_registration = UserCompetition.query.filter(
             and_(
                 UserCompetition.user_id == data['user_id'],
@@ -237,7 +215,6 @@ def register_user_competition():
                 'message': 'User already registered for this competition'
             }), 400
         
-        # Check if competition has available slots
         competition = Competition.query.get(data['competition_id'])
         if not competition:
             return jsonify({
@@ -251,7 +228,6 @@ def register_user_competition():
                 'message': 'No available slots for this competition'
             }), 400
         
-        # Create new registration
         now = datetime.now()
         new_registration = UserCompetition(
             user_id=data['user_id'],
@@ -261,7 +237,6 @@ def register_user_competition():
             date_updated=now
         )
         
-        # Decrease competition slot
         competition.slot -= 1
         
         db.session.add(new_registration)
@@ -285,13 +260,11 @@ def register_user_competition():
             'message': f'Error registering user: {str(e)}'
         }), 500
 
-# 6. DELETE - Remove user from competition
 @main.route('/api/user-competitions/unregister', methods=['POST'])
 def unregister_user_competition():
     try:
         data = request.get_json()
         
-        # Find the registration
         registration = UserCompetition.query.filter(
             and_(
                 UserCompetition.user_id == data['user_id'],
@@ -305,15 +278,12 @@ def unregister_user_competition():
                 'message': 'Registration not found'
             }), 404
         
-        # Get competition to increase slot back
         competition = Competition.query.get(data['competition_id'])
         if competition:
             competition.slot += 1
         
-        # Store registration info before deletion
         registration_info = registration.to_dict()
         
-        # Delete the registration
         db.session.delete(registration)
         db.session.commit()
         
