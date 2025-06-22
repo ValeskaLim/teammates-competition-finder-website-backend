@@ -12,8 +12,6 @@ def get_users():
     try:
         query = Users.query
 
-        print(query.all())
-
         return jsonify({
             'success': True,
             'data': [user.to_dict() for user in query.all()],
