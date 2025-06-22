@@ -7,7 +7,7 @@ from datetime import datetime, date
 
 main = Blueprint('main', __name__)
 
-@main.route('/api/users', methods=['POST'])
+@main.route('/api/Users/GetAllUsers', methods=['POST'])
 def get_users():
     try:
         data = request.get_json();
@@ -23,11 +23,46 @@ def get_users():
             'message': f'Error fetching users: {str(e)}'
         }), 500
 
-@main.route('/api/users/create', methods=['POST'])
+@main.route('/api/Users/SubmitRegisterData', methods=['POST'])
 def create_user():
     try:
         data = request.get_json()
         
+        # List of required fields
+        required_fields = ['username', 'password', 'email', 'fullname', 'gender', 'semester', 'field_of_preference']
+        
+        # Validate empty fields
+        for field in required_fields:
+            if field not in data or data[field] == "":
+                return jsonify({
+                    'success': False,
+                    'message': f'Missing or empty required field: {field[0].upper() + field[1:]}'
+                }), 400
+                
+        # Validate email format and password length
+        if data['email'].find('@') == -1:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid email format'
+            }), 400
+        
+        if len(data['password']) < 4:
+            return jsonify({
+                'success': False,
+                'message': 'Password must be at least 4 characters long'
+            }), 400
+        
+        # Check for existing username or email
+        existing_user = User.query.filter(
+            (User.username == data['username']) | (User.email == data['email'])
+        ).first()
+        
+        if existing_user:
+            return jsonify({
+                'success': False,
+                'message': 'Username or email already exists'
+            }), 400
+                
         new_user = User(
             username=data['username'],
             password=data['password'],
@@ -35,9 +70,11 @@ def create_user():
             fullname=data['fullname'],
             gender=data['gender'],
             semester=data['semester'],
-            major=data['major'],
+            major= 'Computer Science',
             field_of_preference=data['field_of_preference']
         )
+        
+        print("Data received:", new_user.to_dict())
         
         db.session.add(new_user)
         db.session.commit()
