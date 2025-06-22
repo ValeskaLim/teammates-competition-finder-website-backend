@@ -1,20 +1,22 @@
 from flask import Blueprint, request, jsonify, render_template
 from app import db
-from app.models import User, Competition, UserCompetition, TeamInvitation
+from app.models import Users, Competition, UserCompetition, TeamInvitation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_
 from datetime import datetime, date
 
 main = Blueprint('main', __name__)
 
-@main.route('/api/Users/GetAllUsers', methods=['POST'])
+@main.route('/api/user/get-all-user', methods=['POST'])
 def get_users():
     try:
-        data = request.get_json();
-        query = User.query
+        query = Users.query
+
+        print(query.all())
+
         return jsonify({
             'success': True,
-            'users': [user.to_dict() for user in query.all()],
+            'data': [user.to_dict() for user in query.all()],
             "statusCode": 200
         }), 200
     except Exception as e:
@@ -23,7 +25,7 @@ def get_users():
             'message': f'Error fetching users: {str(e)}'
         }), 500
 
-@main.route('/api/Users/SubmitRegisterData', methods=['POST'])
+@main.route('/api/user/submit-register-data', methods=['POST'])
 def create_user():
     try:
         data = request.get_json()
@@ -51,11 +53,12 @@ def create_user():
                 'success': False,
                 'message': 'Password must be at least 4 characters long'
             }), 400
-        
+
         # Check for existing username or email
-        existing_user = User.query.filter(
-            (User.username == data['username']) | (User.email == data['email'])
-        ).first()
+        existing_user = Users.query.filter(
+        (Users.username == data['username']) | (Users.email == data['email'])).first()
+
+        print("Is existing", existing_user)
         
         if existing_user:
             return jsonify({
@@ -63,7 +66,7 @@ def create_user():
                 'message': 'Username or email already exists'
             }), 400
                 
-        new_user = User(
+        new_user = Users(
             username=data['username'],
             password=data['password'],
             email=data['email'],
@@ -104,7 +107,7 @@ def create_user():
             'message': f'Error creating user: {str(e)}'
         }), 500
 
-@main.route('/api/users/search', methods=['POST'])
+@main.route('/api/user/search', methods=['POST'])
 def search_users():
     try:
         data = request.get_json()
