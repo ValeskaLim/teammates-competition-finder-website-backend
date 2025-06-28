@@ -1,20 +1,22 @@
 from flask import Blueprint, request, jsonify, render_template
 from app import db
-from app.models import User, Competition, UserCompetition, TeamInvitation
+from app.models import Users, Competition, UserCompetition, TeamInvitation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_
 from datetime import datetime, date
+from flask_cors import CORS
+
 
 main = Blueprint('main', __name__)
 
-@main.route('/api/users', methods=['POST'])
+@main.route('/api/user/get-all-user', methods=['POST'])
 def get_users():
     try:
-        data = request.get_json();
-        query = User.query
+        query = Users.query
+
         return jsonify({
             'success': True,
-            'users': [user.to_dict() for user in query.all()],
+            'data': [user.to_dict() for user in query.all()],
             "statusCode": 200
         }), 200
     except Exception as e:
@@ -22,22 +24,122 @@ def get_users():
             'success': False,
             'message': f'Error fetching users: {str(e)}'
         }), 500
+        
+@main.route('/api/auth/validate-user', methods=['POST'])
+def validate_user():
+    try:
+        req = request.get_json()
+        
+        is_user_exist = Users.query.filter(
+            (Users.username == req['username']) & (Users.password == req['password'])).first()
+        
+        print(req)
+        
+        if is_user_exist is None:
+            return jsonify({
+            'success': False,
+            'message': f'Invalid username or password'
+        }), 500
+            
+        return jsonify({
+            'success': True,
+            'message': f'Login successful',
+            'user': is_user_exist.to_dict()
+        }), 200
+            
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error validating user'
+        }), 500
+        
+@main.route('/api/user/get-existing-user-by-username', methods=['POST'])
+def get_existing_user():
+    try:
+        req = request.get_json()
+        
+        query = Users.query
+        
+        existing_username = query.filter(
+            (Users.username == req['username'])
+        ).first()
+        
+        existing_email = query.filter(
+            Users.email == req['email']
+        ).first()
+        
+        return jsonify({
+            'success': True,
+            'usernameExist': existing_username is not None,
+            'emailExist': existing_email is not None
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error getting user: {str(e)}'
+        }), 500
 
-@main.route('/api/users/create', methods=['POST'])
+@main.route('/api/user/submit-register-data', methods=['POST'])
 def create_user():
     try:
         data = request.get_json()
         
-        new_user = User(
+        # List of required fields
+        required_fields = ['username', 'password', 'email', 'fullname', 'gender', 'semester', 'field_of_preference']
+        
+        # Validate empty fields
+        for field in required_fields:
+            if field not in data or data[field] == "":
+                return jsonify({
+                    'success': False,
+                    'message': f'Missing or empty required field: {field[0].upper() + field[1:]}'
+                }), 400
+
+        if ' ' in data['username']:
+            return jsonify({
+                'success': False,
+                'message': 'Username cannot contain spaces'
+            }), 400
+                
+        # Validate email format and password length
+        if data['email'].find('@') == -1:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid email format'
+            }), 400
+        
+        if len(data['password']) < 4:
+            return jsonify({
+                'success': False,
+                'message': 'Password must be at least 4 characters long'
+            }), 400
+
+        # Check for existing username or email
+        existing_user = Users.query.filter(
+        (Users.username == data['username']) | (Users.email == data['email'])).first()
+
+        print("Is existing", existing_user)
+        
+        if existing_user:
+            return jsonify({
+                'success': False,
+                'message': 'Username or email already exists'
+            }), 400
+                
+        new_user = Users(
             username=data['username'],
             password=data['password'],
             email=data['email'],
             fullname=data['fullname'],
             gender=data['gender'],
             semester=data['semester'],
-            major=data['major'],
+            major= 'Computer Science',
             field_of_preference=data['field_of_preference']
         )
+        
+        print("Data received:", new_user.to_dict())
         
         db.session.add(new_user)
         db.session.commit()
@@ -67,23 +169,23 @@ def create_user():
             'message': f'Error creating user: {str(e)}'
         }), 500
 
-@main.route('/api/users/search', methods=['POST'])
+@main.route('/api/user/search', methods=['POST'])
 def search_users():
     try:
         data = request.get_json()
-        query = User.query
+        query = Users.query
         
         if 'major' in data and data['major']:
-            query = query.filter(User.major.ilike(f"%{data['major']}%"))
+            query = query.filter(Users.major.ilike(f"%{data['major']}%"))
         
         if 'semester' in data and data['semester']:
-            query = query.filter(User.semester == data['semester'])
+            query = query.filter(Users.semester == data['semester'])
         
         if 'gender' in data and data['gender']:
-            query = query.filter(User.gender == data['gender'])
+            query = query.filter(Users.gender == data['gender'])
         
         if 'field_of_preference' in data and data['field_of_preference']:
-            query = query.filter(User.field_of_preference.ilike(f"%{data['field_of_preference']}%"))
+            query = query.filter(Users.field_of_preference.ilike(f"%{data['field_of_preference']}%"))
         
         page = data.get('page', 1)
         per_page = data.get('per_page', 10)
