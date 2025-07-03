@@ -31,14 +31,14 @@ def validate_user():
         req = request.get_json()
         
         is_user_exist = Users.query.filter(
-            (Users.username == req['username']) & (Users.password == req['password'])).first()
+            (Users.email == req['email']) & (Users.password == req['password'])).first()
         
         print(req)
         
         if is_user_exist is None:
             return jsonify({
             'success': False,
-            'message': f'Invalid username or password'
+            'message': f'Invalid email or password'
         }), 500
             
         return jsonify({
