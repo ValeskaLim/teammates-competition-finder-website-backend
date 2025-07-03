@@ -54,7 +54,7 @@ def validate_user():
             'message': f'Error validating user'
         }), 500
         
-@main.route('/api/user/get-existing-user-by-username', methods=['POST'])
+@main.route('/api/user/get-existing-user', methods=['POST'])
 def get_existing_user():
     try:
         req = request.get_json()
