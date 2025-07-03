@@ -1,10 +1,11 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, make_response, session
 from app import db
 from app.models import Users, Competition, UserCompetition, TeamInvitation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_
-from datetime import datetime, date
+from datetime import datetime, timedelta
 from flask_cors import CORS
+import jwt
 
 
 main = Blueprint('main', __name__)
@@ -33,19 +34,38 @@ def validate_user():
         is_user_exist = Users.query.filter(
             (Users.email == req['email']) & (Users.password == req['password'])).first()
         
-        print(req)
-        
         if is_user_exist is None:
             return jsonify({
             'success': False,
             'message': f'Invalid email or password'
-        }), 500
+        }), 401
+        
+        session['user_id'] = is_user_exist.user_id
+        # session.permanent = True
             
-        return jsonify({
+        token = jwt.encode({
+            'user_id': is_user_exist.user_id,
+            'exp': datetime.utcnow() + timedelta(hours=3)
+        }, 'secret', algorithm='HS256')
+        
+        res = make_response(jsonify({
             'success': True,
             'message': f'Login successful',
-            'user': is_user_exist.to_dict()
-        }), 200
+            'user': {
+                'user_id': is_user_exist.user_id,
+                'username': is_user_exist.username,
+                'email': is_user_exist.email,
+                'fullname': is_user_exist.fullname
+            }
+        }))
+        
+        res.set_cookie('access_token', token,
+                       httponly=True,
+                       secure=True,
+                       samesite='None', 
+                       max_age=60 * 60)
+            
+        return res
             
         
     except Exception as e:
@@ -53,6 +73,62 @@ def validate_user():
             'success': False,
             'message': f'Error validating user'
         }), 500
+        
+@main.route('/api/auth/logout', methods=['POST'])
+def logout():
+    session.clear()
+    res = make_response(jsonify({"message": "Logges out"}))
+    res.set_cookie(
+        'access_token', '', 
+        expires=0,
+        samesite='None',
+        secure=True
+    )
+    
+    res.set_cookie(
+        'session', '', 
+        expires=0,
+        samesite='None',
+        secure=True
+    )
+    return res
+
+@main.route('/api/user/get-current-user', methods=['POST'])
+def get_current_user():
+    
+    user_id = session.get('user_id')
+    
+    if not user_id:
+        token = request.cookies.get('access_token')
+        if token:
+            try:
+                payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+                user_id = payload['user_id']
+                session['user_id'] = user_id
+            except jwt.ExpiredSignatureError:
+                return jsonify({'user': None}), 200
+            except jwt.InvalidTokenError:
+                return jsonify({'user': None}), 200
+    
+    if not user_id:
+        return jsonify({'user': None}), 200
+
+    user = Users.query.get(user_id)
+    if not user:
+        return jsonify({'user': None}), 200
+
+    return jsonify({
+        'user': {
+            'user_id': user.user_id,
+            'username': user.username,
+            'email': user.email,
+            'fullname': user.fullname,
+            'gender': user.gender,
+            'semester': user.semester,
+            'field_of_preference': user.field_of_preference,
+            'major': user.major
+        }
+    }), 200
         
 @main.route('/api/user/get-existing-user', methods=['POST'])
 def get_existing_user():
@@ -119,8 +195,6 @@ def create_user():
         # Check for existing username or email
         existing_user = Users.query.filter(
         (Users.username == data['username']) | (Users.email == data['email'])).first()
-
-        print("Is existing", existing_user)
         
         if existing_user:
             return jsonify({
@@ -138,8 +212,6 @@ def create_user():
             major= 'Computer Science',
             field_of_preference=data['field_of_preference']
         )
-        
-        print("Data received:", new_user.to_dict())
         
         db.session.add(new_user)
         db.session.commit()

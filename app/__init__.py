@@ -11,9 +11,9 @@ def create_app():
     app.config.from_object(Config)
     CORS(app, origins="http://localhost:5173", supports_credentials=True, methods=['POST'])
     
-    
     db.init_app(app)
     migrate = Migrate(app, db)
+    app.config['SECRET_KEY'] = 'secret'
     
     from app.routes import main
     app.register_blueprint(main)
