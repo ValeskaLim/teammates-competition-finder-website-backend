@@ -244,7 +244,7 @@ def create_user():
 @main.route('/api/competition/get-all-competition', methods=['POST'])
 def get_all_competition():
     try:
-        Competition.query.all()
+        competitions = Competition.query.all()
 
         return jsonify({
             'success': True,
@@ -260,12 +260,66 @@ def get_all_competition():
 @main.route('/api/competition/add', methods=['POST'])
 def add_competition():
     try:
+        req = request.get_json()
+
+        required_fields = ['title', 'date', 'status', 'description', 'type', 'slot']
+
+        for field in required_fields:
+            if field not in req or req[field] == "":
+                return jsonify({
+                    'success': False,
+                    'message': f'Missing or empty required field: {field[0].upper() + field[1:]}'
+                }), 400
         
+        if req['slot'] < 0:
+            return jsonify({
+                'success': False,
+                'message': 'Slot cannot goes negative'
+            }), 400
+    
+        new_competition = Competition(
+            title = req['title'],
+            date = req['date'],
+            status = req['status'],
+            description = req['description'],
+            type = req['type'],
+            slot = req['slot']
+        )
+
+        db.session.add(new_competition)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Competition created successfully',
+            'competition_id': new_competition.competition_id,
+            'data': new_competition.to_string()
+        }), 200
+
     except Exception as e:
         return jsonify({
             'success': False,
             'message': f'Error adding competition: {str(e)}'
         }), 500
+    
+@main.route('/api/competition/get-existing-competition', methods=['POST'])
+def get_existing_competition():
+    req = request.get_json()
+
+    existing_data = Competition.query.filter(
+            (Competition.title == req['title']) | (Competition.date == req['date'])
+        ).first()
+    
+    if existing_data:
+        return jsonify({
+            'success': True,
+            'isExist': True
+        }), 200
+    else:
+        return jsonify({
+            'success': True,
+            'isExist': False
+        }), 200
 
 @main.route('/api/user/search', methods=['POST'])
 def search_users():
