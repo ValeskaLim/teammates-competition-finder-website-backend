@@ -241,6 +241,32 @@ def create_user():
             'message': f'Error creating user: {str(e)}'
         }), 500
 
+@main.route('/api/competition/get-all-competition', methods=['POST'])
+def get_all_competition():
+    try:
+        Competition.query.all()
+
+        return jsonify({
+            'success': True,
+            'data': [c.to_string() for c in competitions]
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error fetch competitions: {str(e)}'
+        }), 500
+
+@main.route('/api/competition/add', methods=['POST'])
+def add_competition():
+    try:
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error adding competition: {str(e)}'
+        }), 500
+
 @main.route('/api/user/search', methods=['POST'])
 def search_users():
     try:
