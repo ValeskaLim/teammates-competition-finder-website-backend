@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime, date
+from sqlalchemy.dialects.postgresql import JSON
 
 class Users(db.Model):
     __tablename__ = 'users'
@@ -9,6 +10,7 @@ class Users(db.Model):
     password = db.Column(db.String(15), nullable=False)
     email = db.Column(db.String(100), nullable=False, unique=True)
     fullname = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(30))
     gender = db.Column(db.String(1), nullable=False)
     semester = db.Column(db.Integer, nullable=False)
     major = db.Column(db.String(30), nullable=False)

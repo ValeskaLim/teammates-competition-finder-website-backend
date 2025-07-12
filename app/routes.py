@@ -125,6 +125,7 @@ def get_current_user():
             'fullname': user.fullname,
             'gender': user.gender,
             'semester': user.semester,
+            'role': user.role,
             'field_of_preference': user.field_of_preference,
             'major': user.major
         }
@@ -206,6 +207,7 @@ def create_user():
             username=data['username'],
             password=data['password'],
             email=data['email'],
+            role='normal',
             fullname=data['fullname'],
             gender=data['gender'],
             semester=data['semester'],
@@ -320,6 +322,50 @@ def get_existing_competition():
             'success': True,
             'isExist': False
         }), 200
+        
+@main.route('/api/user/edit-user', methods=['POST'])
+def edit_user():
+    try:
+        data = request.get_json()
+        
+        if ' ' in data['username']:
+            return jsonify({
+                'success': False,
+                'message': 'Username cannot contain spaces'
+            }), 400
+            
+        if data['email'].find('@') == -1:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid email format'
+            }), 400
+            
+        user = Users.query.filter_by(user_id=data['user_id']).first()
+        if not user:
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            }), 404
+            
+        user.username = data['username'],
+        user.email = data['email'],
+        user.gender = data['gender'],
+        user.semester = data['semester'],
+        user.field_of_preference = data['field_of_preference']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Edit user successfully',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error editing user: {str(e)}'
+        }), 500
 
 @main.route('/api/user/search', methods=['POST'])
 def search_users():
