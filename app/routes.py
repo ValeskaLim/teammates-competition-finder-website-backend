@@ -10,6 +10,26 @@ import jwt
 
 main = Blueprint('main', __name__)
 
+def get_current_user_object():
+    user_id = session.get('user_id')
+
+    if not user_id:
+        token = request.cookies.get('access_token')
+        if token:
+            try:
+                payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+                user_id = payload['user_id']
+                session['user_id'] = user_id
+            except jwt.ExpiredSignatureError:
+                return None
+            except jwt.InvalidTokenError:
+                return None
+
+    if not user_id:
+        return None
+
+    return Users.query.get(user_id)
+
 @main.route('/api/user/get-all-user', methods=['POST'])
 def get_users():
     try:
@@ -96,24 +116,7 @@ def logout():
 @main.route('/api/user/get-current-user', methods=['POST'])
 def get_current_user():
     
-    user_id = session.get('user_id')
-    
-    if not user_id:
-        token = request.cookies.get('access_token')
-        if token:
-            try:
-                payload = jwt.decode(token, 'secret', algorithms=['HS256'])
-                user_id = payload['user_id']
-                session['user_id'] = user_id
-            except jwt.ExpiredSignatureError:
-                return jsonify({'user': None}), 200
-            except jwt.InvalidTokenError:
-                return jsonify({'user': None}), 200
-    
-    if not user_id:
-        return jsonify({'user': None}), 200
-
-    user = Users.query.get(user_id)
+    user = get_current_user_object()
     if not user:
         return jsonify({'user': None}), 200
 
@@ -365,6 +368,75 @@ def edit_user():
         return jsonify({
             'success': False,
             'message': f'Error editing user: {str(e)}'
+        }), 500
+        
+@main.route('/api/user/get-all-teammates', methods=['POST'])
+def get_all_teammates():
+    try:
+        current_user = get_current_user_object()
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized or user not found'
+            }), 401
+        
+        as_invitee = TeamInvitation.query.filter_by(invitee_id=current_user.user_id).first()
+
+        team_leader_id = as_invitee.inviter_id if as_invitee else current_user.user_id
+
+        invitations = TeamInvitation.query.filter_by(inviter_id=team_leader_id).all()
+
+        teammate_ids = {team_leader_id}
+        for inv in invitations:
+            teammate_ids.add(inv.invitee_id)
+
+        teammates = Users.query.filter(Users.user_id.in_(list(teammate_ids))).all()
+
+        return jsonify({
+            'success': True,
+            'teammates': [user.to_dict() for user in teammates]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching teammates: {str(e)}'
+        }), 500
+        
+@main.route('/api/user/remove-user-teammates', methods=['POST'])
+def remove_user():
+    try:
+        data = request.get_json()
+        target_user_id = data.get('user_id')
+
+        if not target_user_id:
+            return jsonify({'success': False, 'message': 'User ID is required'}), 400
+
+        current_user = get_current_user_object()
+        if not current_user:
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+        invitation = TeamInvitation.query.filter(
+            ((TeamInvitation.inviter_id == current_user.user_id) & (TeamInvitation.invitee_id == target_user_id)) |
+            ((TeamInvitation.invitee_id == current_user.user_id) & (TeamInvitation.inviter_id == target_user_id))
+        ).first()
+
+        if not invitation:
+            return jsonify({'success': False, 'message': 'No invitation found with this user'}), 404
+
+        db.session.delete(invitation)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f"Success removed user {target_user_id}"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error deleting user: {str(e)}'
         }), 500
 
 @main.route('/api/user/search', methods=['POST'])
