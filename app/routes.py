@@ -312,7 +312,7 @@ def get_existing_competition():
     req = request.get_json()
 
     existing_data = Competition.query.filter(
-            (Competition.title == req['title']) | (Competition.date == req['date'])
+            (Competition.title == req['title'])
         ).first()
     
     if existing_data:
@@ -480,199 +480,32 @@ def search_users():
             'message': f'Error searching users: {str(e)}'
         }), 500
 
-@main.route('/api/competitions/create', methods=['POST'])
-def create_competition():
-    try:
-        data = request.get_json()
-        
-        competition_date = datetime.fromisoformat(data['date'].replace('Z', ''))
-        
-        new_competition = Competition(
-            title=data['title'],
-            date=competition_date,
-            status=data['status'],
-            description=data['description'],
-            type=data['type'],
-            slot=data['slot']
-        )
-        
-        db.session.add(new_competition)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Competition created successfully',
-            'competition_id': new_competition.competition_id,
-            'competition': new_competition.to_string()
-        }), 201
-        
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': 'Competition title already exists'
-        }), 400
-    except KeyError as e:
-        return jsonify({
-            'success': False,
-            'message': f'Missing required field: {str(e)}'
-        }), 400
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'Error creating competition: {str(e)}'
-        }), 500
-
-@main.route('/api/competitions/filter', methods=['POST'])
-def filter_competitions():
+@main.route('/api/competition/remove-competition', methods=['POST'])
+def remove_competition():
     try:
         data = request.get_json()
         query = Competition.query
         
-        if 'status' in data and data['status']:
-            query = query.filter(Competition.status == data['status'])
+        competition = query.filter(
+            Competition.competition_id == data['competition_id']
+        ).first()
         
-        if 'type' in data and data['type']:
-            query = query.filter(Competition.type.ilike(f"%{data['type']}%"))
-        
-        if 'start_date' in data and data['start_date']:
-            start_date = datetime.fromisoformat(data['start_date'].replace('Z', ''))
-            query = query.filter(Competition.date >= start_date)
-        
-        if 'end_date' in data and data['end_date']:
-            end_date = datetime.fromisoformat(data['end_date'].replace('Z', ''))
-            query = query.filter(Competition.date <= end_date)
-        
-        if 'available_slots_only' in data and data['available_slots_only']:
-            query = query.filter(Competition.slot > 0)
-        
-        order_by = data.get('order_by', 'date')
-        order_direction = data.get('order_direction', 'asc')
-        
-        if order_direction.lower() == 'desc':
-            query = query.order_by(getattr(Competition, order_by).desc())
-        else:
-            query = query.order_by(getattr(Competition, order_by))
-        
-        competitions = query.all()
+        if competition is None:
+            return jsonify({
+            'success': False,
+            'message': 'Competition not found'
+        }), 500
+            
+        db.session.delete(competition)
+        db.session.commit()
         
         return jsonify({
             'success': True,
-            'competitions': [comp.to_string() for comp in competitions],
-            'count': len(competitions)
+            'message': f'Success deleting competition {competition.title}'
         }), 200
         
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': f'Error filtering competitions: {str(e)}'
-        }), 500
-
-@main.route('/api/user-competitions/register', methods=['POST'])
-def register_user_competition():
-    try:
-        data = request.get_json()
-        
-        existing_registration = UserCompetition.query.filter(
-            and_(
-                UserCompetition.user_id == data['user_id'],
-                UserCompetition.competition_id == data['competition_id']
-            )
-        ).first()
-        
-        if existing_registration:
-            return jsonify({
-                'success': False,
-                'message': 'User already registered for this competition'
-            }), 400
-        
-        competition = Competition.query.get(data['competition_id'])
-        if not competition:
-            return jsonify({
-                'success': False,
-                'message': 'Competition not found'
-            }), 404
-        
-        if competition.slot <= 0:
-            return jsonify({
-                'success': False,
-                'message': 'No available slots for this competition'
-            }), 400
-        
-        now = datetime.now()
-        new_registration = UserCompetition(
-            user_id=data['user_id'],
-            competition_id=data['competition_id'],
-            created_by=data.get('created_by', 'system'),
-            date_created=now,
-            date_updated=now
-        )
-        
-        competition.slot -= 1
-        
-        db.session.add(new_registration)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'User registered for competition successfully',
-            'registration': new_registration.to_dict()
-        }), 201
-        
-    except KeyError as e:
-        return jsonify({
-            'success': False,
-            'message': f'Missing required field: {str(e)}'
-        }), 400
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'Error registering user: {str(e)}'
-        }), 500
-
-@main.route('/api/user-competitions/unregister', methods=['POST'])
-def unregister_user_competition():
-    try:
-        data = request.get_json()
-        
-        registration = UserCompetition.query.filter(
-            and_(
-                UserCompetition.user_id == data['user_id'],
-                UserCompetition.competition_id == data['competition_id']
-            )
-        ).first()
-        
-        if not registration:
-            return jsonify({
-                'success': False,
-                'message': 'Registration not found'
-            }), 404
-        
-        competition = Competition.query.get(data['competition_id'])
-        if competition:
-            competition.slot += 1
-        
-        registration_info = registration.to_dict()
-        
-        db.session.delete(registration)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'User unregistered from competition successfully',
-            'deleted_registration': registration_info
-        }), 200
-        
-    except KeyError as e:
-        return jsonify({
-            'success': False,
-            'message': f'Missing required field: {str(e)}'
-        }), 400
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'Error unregistering user: {str(e)}'
+            'message': f'Error searching users: {str(e)}'
         }), 500
