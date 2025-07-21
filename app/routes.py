@@ -294,7 +294,7 @@ def get_all_competition():
         competitions = Competition.query.all()
 
         return (
-            jsonify({"success": True, "data": [c.to_string() for c in competitions]}),
+            jsonify({"success": True, "data": [c.to_dict() for c in competitions]}),
             200,
         )
 
@@ -377,7 +377,82 @@ def get_existing_competition():
         return jsonify({"success": True, "isExist": True}), 200
     else:
         return jsonify({"success": True, "isExist": False}), 200
+    
+@main.route("/api/competition/get-competition-by-id", methods=['POST'])
+def get_competititon_by_id():
+    try:
+        data = request.get_json()
+        query = Competition.query
 
+        competition = query.filter(Competition.competition_id == data['id']).first()
+
+        if competition is None:
+            return jsonify({
+                'success': False,
+                'message': 'Data not found'
+            }, 500)
+        
+        return jsonify({
+            'success': True,
+            'data': competition.to_dict()
+        })
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching competition: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/competition/edit-competition", methods=['POST'])
+def edit_competition():
+    try:
+        data = request.get_json()
+        query = Competition.query
+
+        current_competition = query.filter(
+            Competition.competition_id == data['competition_id']
+        ).first()
+
+        if current_competition is None:
+            return jsonify({
+                'success': False,
+                'message': 'Data not found'
+            }), 500
+        
+        current_competition.title = data['title']
+        current_competition.date = data['date']
+        current_competition.status = data['status']
+        current_competition.type = data['type']
+        current_competition.slot = data['slot']
+        current_competition.description = data['description']
+
+
+        with db.session.no_autoflush:
+            existing_competititon = query.filter(
+                Competition.title == data['title'], 
+                Competition.competition_id != data['competition_id']
+            ).first()
+
+        if existing_competititon:
+            return jsonify({
+                'success': False,
+                'message': 'Competition with the same title already exists'
+            }), 406
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Success edit competititon'
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({
+                "success": False, 
+                "message": f"Error edit competition: {str(e)}"
+            }), 500
+        )
 
 @main.route("/api/user/edit-user", methods=["POST"])
 def edit_user():

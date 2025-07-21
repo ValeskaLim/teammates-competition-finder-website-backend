@@ -67,11 +67,11 @@ class Competition(db.Model):
     def __repr__(self):
         return f"<Competition {self.name}>"
 
-    def to_string(self):
+    def to_dict(self):
         return {
             "competition_id": self.competition_id,
             "title": self.title,
-            "date": self.date.isoformat() if self.date else None,
+            "date": self.date.strftime('%Y-%m-%d') if self.date else None,
             "status": self.status,
             "description": self.description,
             "type": self.type,
