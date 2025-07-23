@@ -458,6 +458,7 @@ def edit_competition():
 def edit_user():
     try:
         data = request.get_json()
+        query = Users.query
 
         if " " in data["username"]:
             return (
@@ -470,14 +471,31 @@ def edit_user():
         if data["email"].find("@") == -1:
             return jsonify({"success": False, "message": "Invalid email format"}), 400
 
-        user = Users.query.filter_by(user_id=data["user_id"]).first()
+        user = query.filter_by(user_id=data["user_id"]).first()
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
+        
+        # with db.session.no_autoflush:
+        existing_username = query.filter(
+            Users.username.ilike(f"%{data['username']}%"),
+            Users.user_id != data['user_id']
+        ).first()
+        
+        existing_email = query.filter(
+            Users.email == data['email'],
+            Users.user_id != data['user_id']
+        ).first()
 
-        user.username = (data["username"],)
-        user.email = (data["email"],)
-        user.gender = (data["gender"],)
-        user.semester = (data["semester"],)
+        if existing_username or existing_email:
+            return jsonify({
+                'success': False,
+                'message': 'Username or email already exist'
+            }), 500
+
+        user.username = data["username"],
+        user.email = data["email"],
+        user.gender = data["gender"],
+        user.semester = data["semester"],
         user.field_of_preference = data["field_of_preference"]
 
         db.session.commit()
