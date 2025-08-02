@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from flask_cors import CORS
 import jwt
+from app.similarity import get_all_users, normalize_user, cosine_similarity
 
 
 main = Blueprint("main", __name__)
@@ -608,6 +609,64 @@ def remove_user():
             jsonify({"success": False, "message": f"Error deleting user: {str(e)}"}),
             500,
         )
+
+@main.route("/api/recommend", methods=["POST"])
+def recommend():
+    req = request.get_json()
+    
+    target_user_record = Users.query.filter_by(user_id=req["user_id"]).first()
+    if not target_user_record:
+        return jsonify({
+            "success": False, 
+            "message": "User not found"
+        }), 404
+
+    target_user = {
+        "id": target_user_record.user_id,
+        "semester": target_user_record.semester,
+        "gender": "L" if target_user_record.gender == "L" else "P",
+        "field_of_preference": [f.strip() for f in target_user_record.field_of_preference.split(",") if f.strip()]
+    }
+    
+    users = get_all_users(req["user_id"])
+    
+    semesters = [u["semester"] for u in users + [target_user]]
+    min_sem = min(semesters)
+    max_sem = max(semesters)
+
+    target_vector = normalize_user(
+        target_user, 
+        min_sem, 
+        max_sem,
+        ignore_gender=req["ignore_gender"],
+        ignore_semester=req["ignore_semester"]
+    )
+
+    results = []
+    for user in users:
+        vector = normalize_user(
+            user,
+            min_sem, 
+            max_sem,
+            ignore_gender=req["ignore_gender"],
+            ignore_semester=req["ignore_semester"]
+        )
+        similarity = cosine_similarity(target_vector, vector)
+        results.append({
+            "user_id": user["id"],
+            "fullname": user["fullname"],
+            "gender": user["gender"],
+            "semester": user["semester"],
+            "similarity": similarity
+        })
+
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    
+    return jsonify({
+        "success": True,
+        "results": results[:5]
+    }), 200
+
 
 
 @main.route("/api/user/search", methods=["POST"])
