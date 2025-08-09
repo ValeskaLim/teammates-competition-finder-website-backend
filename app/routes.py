@@ -725,7 +725,9 @@ def remove_competition():
         ).first()
 
         if competition is None:
-            return jsonify({"success": False, "message": "Competition not found"}), 500
+            return jsonify({
+                "success": False, "message": "Competition not found"
+            }), 404
 
         db.session.delete(competition)
         db.session.commit()
@@ -743,5 +745,36 @@ def remove_competition():
     except Exception as e:
         return (
             jsonify({"success": False, "message": f"Error searching users: {str(e)}"}),
+            500,
+        )
+
+@main.route("/api/user/get_invited_user", methods=["POST"])
+def get_invited_user():
+    try:
+        user = get_current_user_object()
+        query = TeamInvitation.query
+        
+        print(user)
+        
+        invited_user = query.filter(
+            TeamInvitation.inviter_id == user.user_id, TeamInvitation.status == "P"
+        ).all()
+        
+        print(invited_user)
+        
+        if invited_user is None or invited_user == []:
+            return jsonify({
+                "success": False, "message": "Invitation not found"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": [user.to_dict() for user in invited_user]
+        }), 200
+        
+        
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
