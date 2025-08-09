@@ -134,6 +134,6 @@ class TeamInvitation(db.Model):
             "date_updated": (
                 self.date_updated.isoformat() if self.date_updated else None
             ),
-            "inviter": self.inviter.to_dict() if self.inviter else None,
+            # "inviter_username": self.inviter.username if self.inviter else None,
             "invitee": self.invitee.to_dict() if self.invitee else None,
         }
