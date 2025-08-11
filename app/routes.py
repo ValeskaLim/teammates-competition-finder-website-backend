@@ -532,13 +532,13 @@ def get_all_teammates():
                 401,
             )
 
-        as_invitee = TeamInvitation.query.filter_by(
-            invitee_id=current_user.user_id
+        as_invitee = TeamInvitation.query.filter(
+            TeamInvitation.invitee_id == current_user.user_id, TeamInvitation.status == "A"
         ).first()
 
         team_leader_id = as_invitee.inviter_id if as_invitee else current_user.user_id
 
-        invitations = TeamInvitation.query.filter_by(inviter_id=team_leader_id).all()
+        invitations = TeamInvitation.query.filter(TeamInvitation.inviter_id == team_leader_id, TeamInvitation.status == "A").all()
 
         teammate_ids = {team_leader_id}
         for inv in invitations:
@@ -655,8 +655,10 @@ def recommend():
         results.append({
             "user_id": user["id"],
             "fullname": user["fullname"],
+            "username": user["username"],
             "gender": user["gender"],
             "semester": user["semester"],
+            "field_of_preference": user["field_of_preference"],
             "similarity": similarity
         })
 
@@ -748,7 +750,7 @@ def remove_competition():
             500,
         )
 
-@main.route("/api/user/get_invited_user", methods=["POST"])
+@main.route("/api/user/get-invited-user", methods=["POST"])
 def get_invited_user():
     try:
         user = get_current_user_object()
