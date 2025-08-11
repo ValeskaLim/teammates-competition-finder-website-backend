@@ -14,6 +14,7 @@ def get_all_users(exclude_id=None):
         user_dict = {
             "id": user.user_id,
             "fullname": user.fullname,
+            "username": user.username,
             "semester": user.semester,
             "gender": "L" if user.gender == "L" else "P",
             "field_of_preference": [f.strip() for f in user.field_of_preference.split(",") if f.strip()]
