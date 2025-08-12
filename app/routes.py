@@ -750,8 +750,8 @@ def remove_competition():
             500,
         )
 
-@main.route("/api/user/get-invited-user", methods=["POST"])
-def get_invited_user():
+@main.route("/api/user/get-invitees-user", methods=["POST"])
+def get_invitees_user():
     try:
         user = get_current_user_object()
         query = TeamInvitation.query
@@ -766,8 +766,9 @@ def get_invited_user():
         
         if invited_user is None or invited_user == []:
             return jsonify({
-                "success": False, "message": "Invitation not found"
-            }), 404
+                "success": True, 
+                "message": "Invitation not found"
+            }), 200
         
         return jsonify({
             "success": True,
@@ -775,6 +776,35 @@ def get_invited_user():
         }), 200
         
         
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+
+@main.route("/api/uset/get-inviter-user", methods=["POST"])
+def get_inviter_user():
+    try:
+        current_user = get_current_user()
+
+        query = TeamInvitation.query
+
+        invitation_list = query.filter(
+            TeamInvitation.invitee_id == current_user
+        ).all()
+
+        if invitation_list is None or invitation_list == []:
+            return jsonify({
+                "success": False,
+                "message": "Invitation not found"
+            }), 200
+        
+
+
+        print(invitation_list)
+
+
+
     except Exception as e:
         return (
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
