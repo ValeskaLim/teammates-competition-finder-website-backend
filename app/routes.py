@@ -756,13 +756,10 @@ def get_invitees_user():
         user = get_current_user_object()
         query = TeamInvitation.query
         
-        print(user)
-        
         invited_user = query.filter(
             TeamInvitation.inviter_id == user.user_id, TeamInvitation.status == "P"
         ).all()
-        
-        print(invited_user)
+
         
         if invited_user is None or invited_user == []:
             return jsonify({
@@ -782,28 +779,103 @@ def get_invitees_user():
             500,
         )
 
-@main.route("/api/uset/get-inviter-user", methods=["POST"])
-def get_inviter_user():
+@main.route("/api/user/get-invites-user", methods=["POST"])
+def get_invites_user():
     try:
-        current_user = get_current_user()
+        current_user = get_current_user_object()
 
         query = TeamInvitation.query
 
         invitation_list = query.filter(
-            TeamInvitation.invitee_id == current_user
+            TeamInvitation.invitee_id == current_user.user_id, TeamInvitation.status == "P"
         ).all()
+
+        print('Invitation data:', invitation_list)
 
         if invitation_list is None or invitation_list == []:
             return jsonify({
                 "success": False,
                 "message": "Invitation not found"
             }), 200
+
+        return jsonify({
+            "success": True,
+            "data": [user.to_dict() for user in invitation_list]
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/user/accept-invites", methods=["POST"])
+def accept_invites():
+    try:
+        req = request.get_json()
+        query = TeamInvitation.query
+
+        team_invitation = query.filter(
+            TeamInvitation.inviter_id == req["user_id"]
+        ).first()
+
+        if team_invitation is None:
+            return jsonify({
+                "success": False,
+                "message": "Invites not found"
+            }), 404
         
+        if team_invitation == "A":
+            return jsonify({
+                "success": False,
+                "message": "Cannot accept invites with status Active"
+            }), 500
+        
+        team_invitation.status = "A"
+        team_invitation.date_updated = datetime.now()
 
+        db.session.commit()
 
-        print(invitation_list)
+        return jsonify({
+            "success": True,
+            "messages": "Invites successfully accepted"
+        }), 200
 
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/user/reject-invites", methods=["POST"])
+def reject_invites():
+    try:
+        req = request.get_json()
+        query = TeamInvitation.query
 
+        invitation_to_remove = query.filter(
+            TeamInvitation.inviter_id == req["user_id"]
+        ).first()
+
+        if invitation_to_remove is None:
+            return jsonify({
+                "success": False,
+                "message": "Invites not found"
+            }), 404
+        
+        if invitation_to_remove == "A":
+            return jsonify({
+                "success": False,
+                "message": "Cannot reject invites with status Active"
+            }), 500
+        
+        db.session.delete(invitation_to_remove)
+        db.session.commit()
+
+        return jsonify({
+                "success": True,
+                "messages": "Invites successfully removed"
+            }), 200
 
     except Exception as e:
         return (
