@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, render_template, make_response, session
 from app import db
-from app.models import Users, Competition, UserCompetition, TeamInvitation
+from app.models import Users, Competition, Teams, TeamInvitation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
@@ -351,7 +351,7 @@ def add_competition():
                     "success": True,
                     "message": "Competition created successfully",
                     "competition_id": new_competition.competition_id,
-                    "data": new_competition.to_string(),
+                    "data": new_competition.to_dict(),
                 }
             ),
             200,
@@ -518,6 +518,60 @@ def edit_user():
             500,
         )
 
+@main.route("/api/user/get-user-by-id", methods=["POST"])
+def get_user_by_id():
+    try:
+        req = request.get_json()
+        query = Users.query
+
+        user = query.filter(
+            Users.user_id == req["user_id"]
+        ).first()
+
+        if user is None:
+            return jsonify({
+                "success": False,
+                "message": "User not found"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": user.to_dict()
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching user: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/user/check-is-have-team", methods=["POST"])
+def check_is_have_team():
+    try:
+        current_user = get_current_user_object()
+        query = Teams.query
+
+        is_have_team = query.filter(
+            Teams.member_id.ilike(f"%{current_user.user_id}%")
+        ).first()
+
+        if is_have_team is None:
+            return jsonify({
+                "success": False,
+                "message": "User doesn't have team yet"
+            }), 200
+        
+        return jsonify({
+            "success": True,
+            "message": "User registered in team"
+        })
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error checking: {str(e)}"}),
+            500,
+        )
+
 
 @main.route("/api/user/get-all-teammates", methods=["POST"])
 def get_all_teammates():
@@ -532,26 +586,20 @@ def get_all_teammates():
                 401,
             )
 
-        as_invitee = TeamInvitation.query.filter(
-            TeamInvitation.invitee_id == current_user.user_id, TeamInvitation.status == "A"
+        team_member = Teams.query.filter(
+            Teams.member_id.ilike(f"%{current_user.user_id}%")
         ).first()
 
-        team_leader_id = as_invitee.inviter_id if as_invitee else current_user.user_id
-
-        invitations = TeamInvitation.query.filter(TeamInvitation.inviter_id == team_leader_id, TeamInvitation.status == "A").all()
-
-        teammate_ids = {team_leader_id}
-        for inv in invitations:
-            teammate_ids.add(inv.invitee_id)
-
-        teammates = Users.query.filter(Users.user_id.in_(list(teammate_ids))).all()
-
-        return (
-            jsonify(
-                {"success": True, "teammates": [user.to_dict() for user in teammates]}
-            ),
-            200,
-        )
+        if team_member is None:
+            return jsonify({
+                "success": False,
+                "message": "User not found"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": team_member.to_dict()
+        }), 200
 
     except Exception as e:
         return (
@@ -566,7 +614,8 @@ def get_all_teammates():
 def remove_user():
     try:
         data = request.get_json()
-        target_user_id = data.get("user_id")
+        target_user_id = str(data.get("user_id"))
+        query = Teams.query
 
         if not target_user_id:
             return jsonify({"success": False, "message": "User ID is required"}), 400
@@ -575,26 +624,25 @@ def remove_user():
         if not current_user:
             return jsonify({"success": False, "message": "Unauthorized"}), 401
 
-        invitation = TeamInvitation.query.filter(
-            (
-                (TeamInvitation.inviter_id == current_user.user_id)
-                & (TeamInvitation.invitee_id == target_user_id)
-            )
-            | (
-                (TeamInvitation.invitee_id == current_user.user_id)
-                & (TeamInvitation.inviter_id == target_user_id)
-            )
+        member_to_delete = query.filter(
+            Teams.member_id.ilike(f"%{target_user_id}%")
         ).first()
 
-        if not invitation:
+        if not member_to_delete:
             return (
                 jsonify(
-                    {"success": False, "message": "No invitation found with this user"}
+                    {"success": False, "message": "This member doesnt exist in the team"}
                 ),
                 404,
             )
+        
+        member_ids = member_to_delete.member_id.split(",")
 
-        db.session.delete(invitation)
+        if str(target_user_id) in member_ids:
+            member_ids.remove(str(target_user_id))
+
+        member_to_delete.member_id = ",".join(member_ids)
+
         db.session.commit()
 
         return (
@@ -790,8 +838,6 @@ def get_invites_user():
             TeamInvitation.invitee_id == current_user.user_id, TeamInvitation.status == "P"
         ).all()
 
-        print('Invitation data:', invitation_list)
-
         if invitation_list is None or invitation_list == []:
             return jsonify({
                 "success": False,
@@ -812,6 +858,7 @@ def get_invites_user():
 @main.route("/api/user/accept-invites", methods=["POST"])
 def accept_invites():
     try:
+        current_user = get_current_user_object()
         req = request.get_json()
         query = TeamInvitation.query
 
@@ -833,6 +880,18 @@ def accept_invites():
         
         team_invitation.status = "A"
         team_invitation.date_updated = datetime.now()
+
+        get_inviter_team = Teams.query.filter(
+            Teams.member_id.ilike(f"%{req['user_id']}%")
+        ).first()
+
+        if get_inviter_team is None:
+            return jsonify({
+                "success": False,
+                "message": "Team not found"
+            }), 404
+        
+        get_inviter_team.member_id += f",{current_user.user_id}"
 
         db.session.commit()
 
@@ -876,6 +935,137 @@ def reject_invites():
                 "success": True,
                 "messages": "Invites successfully removed"
             }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/team/create-team", methods=["POST"])
+def create_team():
+    try:
+        req = request.get_json()
+        query = Teams.query
+
+        check_is_exist = query.filter(
+            (Teams.team_name == req['team_name']) | (Teams.leader_id == req['leader_id'])
+        ).first()
+
+        if check_is_exist is not None:
+            return jsonify({
+                "success": False,
+                "message": "Team / user already exist"
+            }), 500
+        
+        new_team = Teams(
+            member_id = str(req["leader_id"]),
+            team_name = req["team_name"],
+            date_created = datetime.now(),
+            date_updated = datetime.now(),
+            leader_id = req["leader_id"],
+        )
+
+        db.session.add(new_team)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": f"Team  successfully created"
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/team/add-wishlist-competition", methods=["POST"])
+def add_wishlist_competition():
+    try:
+        current_user = get_current_user_object()
+        current_user_id = str(current_user.user_id)
+        req = request.get_json()
+        query = Teams.query
+
+        current_team = query.filter(
+            Teams.member_id.ilike(f"%{current_user_id}%")
+        ).first()
+
+        if current_team is None:
+            return jsonify({
+                "success": True,
+                "message": "Team not found"
+            }), 404
+        
+        current_team.competition_id = req["competition_id"]
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Competition successfully added to wishlist"
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error searching users: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/team/remove-wishlist-competition", methods=["POST"])
+def remove_wishlist_competition():
+    try:
+        current_user = get_current_user_object()
+        current_user_id = str(current_user.user_id)
+        req = request.get_json()
+        query = Teams.query
+
+        current_team = query.filter(
+            Teams.member_id.ilike(f"%{current_user_id}%")
+        ).first()
+
+        if current_team is None:
+            return jsonify({
+                "success": True,
+                "message": "Team not found"
+            }), 404
+        
+        current_team.competition_id = None
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Competition successfully removed from wishlist"
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error searching users: {str(e)}"}),
+            500,
+        )
+    
+@main.route("/api/team/check-is-leader", methods=["POST"])
+def check_is_leader():
+    try:
+        current_user = get_current_user_object()
+        query = Teams.query
+
+        is_leader = query.filter(
+            Teams.leader_id == current_user.user_id, Teams.member_id.ilike(f"%{current_user.user_id}%")
+        ).first()
+
+        if is_leader is None:
+            return({
+                "success": True,
+                "isLeader": False
+            }), 200
+        
+        return jsonify({
+            "success": True,
+            "isLeader": True
+        }), 200
 
     except Exception as e:
         return (
