@@ -17,8 +17,6 @@ class Users(db.Model):
     major = db.Column(db.String(30), nullable=False)
     field_of_preference = db.Column(db.String(500), nullable=False)
 
-    user_competitions = db.relationship("UserCompetition", backref="users", lazy=True)
-
     sent_invitations = db.relationship(
         "TeamInvitation",
         foreign_keys="TeamInvitation.inviter_id",
@@ -60,10 +58,6 @@ class Competition(db.Model):
     type = db.Column(db.String(100), nullable=False)
     slot = db.Column(db.Integer, nullable=False)
 
-    user_competition = db.relationship(
-        "UserCompetition", backref="competition", lazy=True
-    )
-
     def __repr__(self):
         return f"<Competition {self.name}>"
 
@@ -79,33 +73,33 @@ class Competition(db.Model):
         }
 
 
-class UserCompetition(db.Model):
-    __tablename__ = "user_competition"
+class Teams(db.Model):
+    __tablename__ = "teams"
 
-    user_competition_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"))
-    competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"))
-    created_by = db.Column(db.String(100))
+    team_id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(db.String(200), nullable=False)
+    team_name = db.Column(db.String(100), nullable=False)
+    competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"), nullable=True)
+    leader_id = db.Column(db.Integer)
     date_created = db.Column(db.DateTime(timezone=False), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=False), nullable=False)
 
     def __repr__(self):
-        return f"<UserCompetition {self.user_competition_id}>"
+        return f"<Teams {self.team_id}>"
 
     def to_dict(self):
         return {
-            "user_competition_id": self.user_competition_id,
-            "user_id": self.user_id,
+            "team_id": self.team_id,
+            "member_id": self.member_id,
+            "team_name": self.team_name,
             "competition_id": self.competition_id,
-            "created_by": self.created_by,
+            "leader_id": self.leader_id,
             "date_created": (
                 self.date_created.isoformat() if self.date_created else None
             ),
             "date_updated": (
                 self.date_updated.isoformat() if self.date_updated else None
-            ),
-            "users": self.user.to_dict() if self.user else None,
-            "competition": self.competition.to_dict() if self.competition else None,
+            )
         }
 
 
