@@ -6,7 +6,7 @@ from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from flask_cors import CORS
 import jwt
-from app.similarity import get_all_users, normalize_user, cosine_similarity
+from app.similarity import filter_available_user, normalize_user, cosine_similarity
 
 
 main = Blueprint("main", __name__)
@@ -682,7 +682,9 @@ def recommend():
         "field_of_preference": [f.strip() for f in target_user_record.field_of_preference.split(",") if f.strip()]
     }
     
-    users = get_all_users(req["user_id"])
+    users = filter_available_user(req["user_id"])
+
+    print('users:',users)
     
     semesters = [u["semester"] for u in users + [target_user]]
     min_sem = min(semesters)
