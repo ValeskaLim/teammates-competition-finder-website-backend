@@ -16,6 +16,8 @@ class Users(db.Model):
     semester = db.Column(db.Integer, nullable=False)
     major = db.Column(db.String(30), nullable=False)
     field_of_preference = db.Column(db.String(500), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=False), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=False), nullable=False)
 
     sent_invitations = db.relationship(
         "TeamInvitation",
@@ -57,6 +59,8 @@ class Competition(db.Model):
     description = db.Column(db.String(500), nullable=False)
     type = db.Column(db.String(100), nullable=False)
     slot = db.Column(db.Integer, nullable=False)
+    date_created = db.Column(db.DateTime(timezone=False), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=False), nullable=False)
 
     def __repr__(self):
         return f"<Competition {self.name}>"

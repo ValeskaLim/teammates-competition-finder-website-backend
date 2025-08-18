@@ -253,6 +253,8 @@ def create_user():
             semester=data["semester"],
             major="Computer Science",
             field_of_preference=data["field_of_preference"],
+            date_created=datetime.now(),
+            date_updated=datetime.now()
         )
 
         db.session.add(new_user)
@@ -468,12 +470,10 @@ def edit_user():
         query = Users.query
 
         if " " in data["username"]:
-            return (
-                jsonify(
-                    {"success": False, "message": "Username cannot contain spaces"}
-                ),
-                400,
-            )
+            return jsonify({
+                "success": False, 
+                "message": "Username cannot contain spaces"
+            }), 400
 
         if data["email"].find("@") == -1:
             return jsonify({"success": False, "message": "Invalid email format"}), 400
@@ -504,6 +504,7 @@ def edit_user():
         user.gender = data["gender"],
         user.semester = data["semester"],
         user.field_of_preference = data["field_of_preference"]
+        user.date_updated=datetime.now()
 
         db.session.commit()
 
