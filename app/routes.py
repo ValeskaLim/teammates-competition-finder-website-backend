@@ -714,7 +714,7 @@ def recommend():
             "username": user["username"],
             "gender": user["gender"],
             "semester": user["semester"],
-            "field_of_preference": user["field_of_preference"],
+            "field_of_preference": ",".join(user["field_of_preference"]),
             "similarity": similarity
         })
 
