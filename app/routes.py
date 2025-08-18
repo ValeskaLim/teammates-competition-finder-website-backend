@@ -327,11 +327,17 @@ def add_competition():
                     400,
                 )
 
-        if req["slot"] < 0:
-            return (
-                jsonify({"success": False, "message": "Slot cannot goes negative"}),
-                400,
-            )
+        if req["slot"] <= 0:
+            return jsonify({
+                    "success": False, 
+                    "message": "Slot must be greater than zero"
+                }), 500
+        
+        if len(req["description"]) > 500:
+            return jsonify({
+                    "success": False, 
+                    "message": "Description cannot exceed 500 characters"
+                }), 400
 
         new_competition = Competition(
             title=req["title"],
@@ -994,9 +1000,15 @@ def add_wishlist_competition():
 
         if current_team is None:
             return jsonify({
-                "success": True,
+                "success": False,
                 "message": "Team not found"
             }), 404
+        
+        if current_team.competition_id is not None:
+            return jsonify({
+                "success": False,
+                "message": "Each team only allowed to join 1 competition"
+            }), 500
         
         current_team.competition_id = req["competition_id"]
 
