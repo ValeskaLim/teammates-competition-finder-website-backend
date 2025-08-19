@@ -342,12 +342,14 @@ def add_competition():
                 }), 400
 
         new_competition = Competition(
-            title=req["title"],
-            date=req["date"],
-            status=req["status"],
-            description=req["description"],
-            type=req["type"],
-            slot=req["slot"],
+            title = req["title"],
+            date = req["date"],
+            status = req["status"],
+            description = req["description"],
+            type = req["type"],
+            slot = req["slot"],
+            date_created = datetime.now(),
+            date_updated = datetime.now(),
         )
 
         db.session.add(new_competition)
@@ -434,6 +436,7 @@ def edit_competition():
         current_competition.type = data['type']
         current_competition.slot = data['slot']
         current_competition.description = data['description']
+        current_competition.date_updated = datetime.now()
 
 
         with db.session.no_autoflush:
@@ -649,6 +652,8 @@ def remove_user():
             member_ids.remove(str(target_user_id))
 
         member_to_delete.member_id = ",".join(member_ids)
+
+        member_to_delete.date_updated = datetime.now()
 
         db.session.commit()
 
