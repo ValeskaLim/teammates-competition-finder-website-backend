@@ -12,3 +12,10 @@ services:
     volumes:
       - .:/app
     command: python run.py
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+        - action: rebuild
+          path: requirements.txt
