@@ -2,18 +2,20 @@ version: "3.8"
 
 services:
   db:
-    image: postgres:15
+    image: postgres:16
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+      TZ: Asia/Jakarta
+      PGTZ: Asia/Jakarta
     volumes:
       - db_data:/var/lib/postgresql/data
     networks:
       - backend
 
-  web:
+  backend:
     build: .
     restart: always
     command: flask run --host=0.0.0.0 --port=5002 --reload
