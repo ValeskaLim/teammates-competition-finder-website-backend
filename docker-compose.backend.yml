@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: Asia/Jakarta
+      PGTZ: Asia/Jakarta
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  backend:
+    build: .
+    restart: always
+    command: flask run --host=0.0.0.0 --port=5002 --reload
+    env_file:
+      - .env
+    ports:
+        # For local only
+      - "127.0.0.1:5002:5002"
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+    networks:
+      - backend
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+        - action: rebuild
+          path: requirements.txt
+
+
+volumes:
+  db_data:
+
+networks:
+  backend:
+    driver: bridge
