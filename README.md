@@ -19,8 +19,8 @@ cd your-repo-name
 2. **Build and start the containers**
 
 ```bash
-docker-compose up --build
+docker compose -f docker-compose.backend.yml up --build -d
 ```
 
 ### Notes
-Backend will run on port `5002`
+Backend will listened to port `5002`
