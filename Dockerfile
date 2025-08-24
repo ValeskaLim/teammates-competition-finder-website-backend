@@ -13,4 +13,4 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 5002
 
-CMD ["python", "run.py"]
+CMD ["python", "-u", "run.py"]

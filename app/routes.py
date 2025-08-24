@@ -53,6 +53,16 @@ def get_users():
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
+        
+def check_is_already_have_team(user_id):
+    str_user_id = str(user_id)
+    query = Teams.query
+
+    is_have_team = query.filter(
+        Teams.member_id.ilike(f"%{str_user_id}%")
+    ).first()
+
+    return is_have_team is not None
 
 
 @main.route("/api/auth/validate-user", methods=["POST"])
@@ -673,6 +683,20 @@ def remove_user():
 @main.route("/api/recommend", methods=["POST"])
 def recommend():
     req = request.get_json()
+    
+    print(req, flush=True)
+    
+    # Check user is already have team
+    is_have_team = check_is_already_have_team(req["user_id"])
+    
+    print('Do have team?', is_have_team, flush=True)
+    print('yes', flush=True)
+    
+    if is_have_team is False:
+        return jsonify({
+            "success": False,
+            "message": "User doesn't have team yet, please create or join team first"
+        }), 500
     
     target_user_record = Users.query.filter_by(user_id=req["user_id"]).first()
     if not target_user_record:
