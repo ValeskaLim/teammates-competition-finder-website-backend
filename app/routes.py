@@ -684,13 +684,8 @@ def remove_user():
 def recommend():
     req = request.get_json()
     
-    print(req, flush=True)
-    
     # Check user is already have team
     is_have_team = check_is_already_have_team(req["user_id"])
-    
-    print('Do have team?', is_have_team, flush=True)
-    print('yes', flush=True)
     
     if is_have_team is False:
         return jsonify({
