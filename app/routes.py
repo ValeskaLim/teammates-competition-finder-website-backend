@@ -887,6 +887,36 @@ def get_invites_user():
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
+        
+@main.route("/api/user/invite-user", methods=["POST"])
+def invite_user():
+    try:
+        req = request.get_json()
+        current_user = get_current_user_object()
+
+        new_invitation = TeamInvitation(
+            inviter_id = current_user.user_id,
+            invitee_id = req["user_id"],
+            status = "P",
+            date_created = datetime.now(),
+            date_updated = datetime.now()
+        )
+        
+        db.session.add(new_invitation)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "User invited successfully"
+        }), 200
+        
+    except Exception as e:
+        return (
+            jsonify({
+                "success": False, 
+                "message": f"Error fetching users: {str(e)}"
+            }), 500
+        )
     
 @main.route("/api/user/accept-invites", methods=["POST"])
 def accept_invites():
@@ -896,7 +926,7 @@ def accept_invites():
         query = TeamInvitation.query
 
         team_invitation = query.filter(
-            TeamInvitation.inviter_id == req["user_id"]
+            TeamInvitation.inviter_id == req["user_id"], TeamInvitation.status == "P", TeamInvitation.invitee_id == current_user.user_id
         ).first()
 
         if team_invitation is None:
@@ -974,6 +1004,42 @@ def reject_invites():
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
+        
+@main.route("/api/user/remove-user-invitation", methods=["POST"])
+def remove_user_invitation():
+    try:
+        req = request.get_json()
+        query = TeamInvitation.query
+
+        invitatee_to_remove = query.filter(
+            TeamInvitation.invitee_id == req["user_id"]
+        ).first()
+
+        if invitatee_to_remove is None:
+            return jsonify({
+                "success": False,
+                "message": "Invites not found"
+            }), 404
+        
+        if invitatee_to_remove == "A":
+            return jsonify({
+                "success": False,
+                "message": "Cannot remove invites with status Active"
+            }), 500
+        
+        db.session.delete(invitatee_to_remove)
+        db.session.commit()
+
+        return jsonify({
+                "success": True,
+                "messages": "Invitee successfully removed"
+            }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error removing user: {str(e)}"}),
+            500,
+        )
     
 @main.route("/api/team/create-team", methods=["POST"])
 def create_team():
@@ -1012,6 +1078,38 @@ def create_team():
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
+        
+@main.route("/api/team/edit-team", methods=["POST"])
+def edit_team():
+    try:
+        req = request.get_json()
+        query = Teams.query
+        
+        if req["team_name"] == "":
+            return jsonify({
+                "success": False,
+                "message": "Team name is required"
+            }), 406
+        
+        current_team = query.filter(
+            Teams.team_id == req["team_id"]
+        ).first()
+        
+        current_team.team_name = req["team_name"]
+        current_team.date_updated = datetime.now()
+
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Team successfully edited"
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+                "success": False, 
+                "message": f"Error editing team: {str(e)}"
+            }), 500
     
 @main.route("/api/team/add-wishlist-competition", methods=["POST"])
 def add_wishlist_competition():
