@@ -6,3 +6,4 @@ flask-migrate
 flask-cors
 pyjwt
 numpy
+Flask-Mail
