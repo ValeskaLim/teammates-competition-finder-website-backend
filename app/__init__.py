@@ -3,9 +3,10 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from app.config import Config
 from flask_cors import CORS
+from flask_mail import Mail
 
 db = SQLAlchemy()
-
+mail = Mail()
 
 def create_app():
     app = Flask(__name__)
@@ -19,6 +20,7 @@ def create_app():
 
     db.init_app(app)
     migrate = Migrate(app, db)
+    mail.init_app(app)
     app.config["SECRET_KEY"] = "secret"
 
     from app.routes import main

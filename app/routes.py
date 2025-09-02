@@ -1,11 +1,13 @@
-from flask import Blueprint, request, jsonify, render_template, make_response, session
-from app import db
+from flask import Blueprint, request, jsonify, render_template, make_response, session, current_app
+from app import db, mail
 from app.models import Users, Competition, Teams, TeamInvitation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from flask_cors import CORS
 import jwt
+from flask_mail import Message
+import threading
 from app.similarity import filter_available_user, normalize_user, cosine_similarity
 
 
@@ -31,6 +33,10 @@ def get_current_user_object():
         return None
 
     return Users.query.get(user_id)
+
+def send_async_email(app, msg):
+    with app.app_context():
+        mail.send(msg)
 
 
 @main.route("/api/user/get-all-user", methods=["POST"])
@@ -667,6 +673,33 @@ def remove_user():
 
         db.session.commit()
 
+        # Notify removed member by email
+        invitee = Users.query.filter(Users.user_id == data["user_id"]).first()
+
+        if invitee and invitee.email:
+            try:
+                msg = Message(
+                    subject = "You Have Been Removed from the Team",
+                    recipients = [invitee.email],
+                    body = (
+                        f"Hello {invitee.username},\n\n"
+                        f"We’d like to inform you that you have been removed from the team by {current_user.username}.\n\n"
+                        f"You can explore the Recommendation List to find and join other teams.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {invitee.username},</p>"
+                        f"<p>We’d like to inform you that you have been removed from the team by <b>{current_user.username}</b>.</p>"
+                        f"<p>You can explore the <b>Recommendation</b> to find and join other teams.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
+
         return (
             jsonify(
                 {"success": True, "message": f"Success removed user {target_user_id}"}
@@ -904,6 +937,33 @@ def invite_user():
         
         db.session.add(new_invitation)
         db.session.commit()
+
+        # Notify invited user by email
+        invitee = Users.query.filter(Users.user_id == req["user_id"]).first()
+
+        if invitee and invitee.email:
+            try:
+                msg = Message(
+                    subject = "You have been invited!",
+                    recipients = [invitee.email],
+                    body = (
+                        f"Hello {invitee.username},\n\n"
+                        f"{current_user.username} has invited you to join their team.\n\n"
+                        f"Please log in to accept or decline the invitation.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {invitee.username},</p>"
+                        f"<p><b>{current_user.username}</b> has invited you to join their team.</p>"
+                        f"<p>Please log in to accept or decline the invitation.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
         
         return jsonify({
             "success": True,
@@ -958,6 +1018,33 @@ def accept_invites():
 
         db.session.commit()
 
+        # Notify inviter user by email
+        inviter = Users.query.filter(Users.user_id == req["user_id"]).first()
+
+        if inviter and inviter.email:
+            try:
+                msg = Message(
+                    subject = "Invitation Accepted!",
+                    recipients = [inviter.email],
+                    body = (
+                        f"Hello {inviter.username},\n\n"
+                        f"Good news! {current_user.username} has accepted your invitation to join your team.\n\n"
+                        f"Check Teammates List to check your team member.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {inviter.username},</p>"
+                        f"<p>Good news! <b>{current_user.username}</b> has accepted your invitation to join your team.</p>"
+                        f"<p>Check <b>Teammates List</b> to check your team member.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
+
         return jsonify({
             "success": True,
             "messages": "Invites successfully accepted"
@@ -973,6 +1060,7 @@ def accept_invites():
 def reject_invites():
     try:
         req = request.get_json()
+        current_user = get_current_user_object()
         query = TeamInvitation.query
 
         invitation_to_remove = query.filter(
@@ -993,6 +1081,33 @@ def reject_invites():
         
         db.session.delete(invitation_to_remove)
         db.session.commit()
+
+        # Notify inviter user by email
+        inviter = Users.query.filter(Users.user_id == req["user_id"]).first()
+
+        if inviter and inviter.email:
+            try:
+                msg = Message(
+                    subject = "Invitation Rejected",
+                    recipients = [inviter.email],
+                    body = (
+                        f"Hello {inviter.username},\n\n"
+                        f"We’d like to let you know that {current_user.username} has declined your invitation to join the team.\n\n"
+                        f"You can invite other members from the Recommendation List.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {inviter.username},</p>"
+                        f"<p>We’d like to let you know that <b>{current_user.username}</b> has declined your invitation to join the team.</p>"
+                        f"<p>You can invite other members from the <b>Recommendation</b> List.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
 
         return jsonify({
                 "success": True,
@@ -1209,3 +1324,16 @@ def check_is_leader():
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
+    
+@main.route("/api/send-test-email", methods=["GET"])
+def send_test_email():
+    try:
+        msg = Message(
+            subject="Hello from Gmail SMTP",
+            recipients=["contactbobomad@gmail.com"],  # 👈 change this
+            body="This is a test email sent via Gmail SMTP in Flask."
+        )
+        mail.send(msg)
+        return jsonify({"success": True, "message": "Email sent!"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
