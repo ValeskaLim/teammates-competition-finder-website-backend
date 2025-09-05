@@ -1,0 +1,38 @@
+from flask import session, request
+from app.models import Users, Teams
+from app import db, mail
+import jwt
+
+def get_current_user_object():
+    user_id = session.get("user_id")
+
+    if not user_id:
+        token = request.cookies.get("access_token")
+        if token:
+            try:
+                payload = jwt.decode(token, "secret", algorithms=["HS256"])
+                user_id = payload["user_id"]
+                session["user_id"] = user_id
+            except jwt.ExpiredSignatureError:
+                return None
+            except jwt.InvalidTokenError:
+                return None
+
+    if not user_id:
+        return None
+
+    return Users.query.get(user_id)
+
+def send_async_email(app, msg):
+    with app.app_context():
+        mail.send(msg)
+
+def check_is_already_have_team(user_id):
+    str_user_id = str(user_id)
+    query = Teams.query
+
+    is_have_team = query.filter(
+        Teams.member_id.ilike(f"%{str_user_id}%")
+    ).first()
+
+    return is_have_team is not None
