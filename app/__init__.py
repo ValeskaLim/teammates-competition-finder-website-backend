@@ -4,9 +4,8 @@ from flask_migrate import Migrate
 from app.config import Config
 from flask_cors import CORS
 from flask_mail import Mail
-
-db = SQLAlchemy()
-mail = Mail()
+from app.routes import main
+from app.extensions import db, mail
 
 def create_app():
     app = Flask(__name__)

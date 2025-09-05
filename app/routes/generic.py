@@ -1,6 +1,6 @@
 from flask import session, request
 from app.models import Users, Teams
-from app import db, mail
+from app.extensions import db, mail
 import jwt
 
 def get_current_user_object():

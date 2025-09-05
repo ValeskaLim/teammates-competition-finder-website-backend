@@ -2,8 +2,12 @@ from flask import Blueprint, jsonify, session, request, current_app, make_respon
 import jwt
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
-from app.models import Users
-from app import db
+from app.models import Users, Teams, TeamInvitation
+from app.extensions import db
+from flask_mail import Message
+import threading
+from app.routes.generic import send_async_email, check_is_already_have_team
+from app.utils.response import success_response, error_response
 
 user_bp = Blueprint('user', __name__, url_prefix="/user")
 
@@ -26,27 +30,6 @@ def get_current_user_object():
         return None
 
     return Users.query.get(user_id)
-
-@user_bp.route("/get-all-user", methods=["POST"])
-def get_users():
-    try:
-        query = Users.query
-
-        return (
-            jsonify(
-                {
-                    "success": True,
-                    "data": [user.to_dict() for user in query.all()],
-                    "statusCode": 200,
-                }
-            ),
-            200,
-        )
-    except Exception as e:
-        return (
-            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
-            500,
-        )
     
 @user_bp.route("/get-current-user", methods=["POST"])
 def get_current_user():
@@ -74,7 +57,7 @@ def get_current_user():
         200,
     )
 
-@user_bp.route("/api/user/get-existing-user", methods=["POST"])
+@user_bp.route("/get-existing-user", methods=["POST"])
 def get_existing_user():
     try:
         req = request.get_json()
@@ -99,6 +82,134 @@ def get_existing_user():
     except Exception as e:
         return (
             jsonify({"success": False, "message": f"Error getting user: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/get-user-by-id", methods=["POST"])
+def get_user_by_id():
+    try:
+        req = request.get_json()
+        query = Users.query
+
+        user = query.filter(
+            Users.user_id == req["user_id"]
+        ).first()
+
+        if user is None:
+            return jsonify({
+                "success": False,
+                "message": "User not found"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": user.to_dict()
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching user: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/search", methods=["POST"])
+def search_users():
+    try:
+        data = request.get_json()
+        query = Users.query
+
+        if "major" in data and data["major"]:
+            query = query.filter(Users.major.ilike(f"%{data['major']}%"))
+
+        if "semester" in data and data["semester"]:
+            query = query.filter(Users.semester == data["semester"])
+
+        if "gender" in data and data["gender"]:
+            query = query.filter(Users.gender == data["gender"])
+
+        if "field_of_preference" in data and data["field_of_preference"]:
+            query = query.filter(
+                Users.field_of_preference.ilike(f"%{data['field_of_preference']}%")
+            )
+
+        page = data.get("page", 1)
+        per_page = data.get("per_page", 10)
+
+        users = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "users": [user.to_dict() for user in users.items],
+                    "total": users.total,
+                    "pages": users.pages,
+                    "current_page": users.page,
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error searching users: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/get-invites-user", methods=["POST"])
+def get_invites_user():
+    try:
+        current_user = get_current_user_object()
+
+        query = TeamInvitation.query
+
+        invitation_list = query.filter(
+            TeamInvitation.invitee_id == current_user.user_id, TeamInvitation.status == "P"
+        ).all()
+
+        if invitation_list is None or invitation_list == []:
+            return jsonify({
+                "success": False,
+                "message": "Invitation not found"
+            }), 200
+
+        return jsonify({
+            "success": True,
+            "data": [user.to_dict() for user in invitation_list]
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/get-invitees-user", methods=["POST"])
+def get_invitees_user():
+    try:
+        user = get_current_user_object()
+        query = TeamInvitation.query
+        
+        invited_user = query.filter(
+            TeamInvitation.inviter_id == user.user_id, TeamInvitation.status == "P"
+        ).all()
+
+        
+        if invited_user is None or invited_user == []:
+            return jsonify({
+                "success": True, 
+                "message": "Invitation not found"
+            }), 200
+        
+        return jsonify({
+            "success": True,
+            "data": [user.to_dict() for user in invited_user]
+        }), 200
+        
+        
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
     
@@ -158,6 +269,381 @@ def validate_user():
     except Exception as e:
         return jsonify({"success": False, "message": f"Error validating user"}), 500
     
+@user_bp.route("/get-all-teammates", methods=["POST"])
+def get_all_teammates():
+    try:
+        current_user = get_current_user_object()
+
+        if not current_user:
+            return (
+                jsonify(
+                    {"success": False, "message": "Unauthorized or user not found"}
+                ),
+                401,
+            )
+
+        team_member = Teams.query.filter(
+            Teams.member_id.ilike(f"%{current_user.user_id}%")
+        ).first()
+
+        if team_member is None:
+            return jsonify({
+                "success": False,
+                "message": "User not found"
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": team_member.to_dict()
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify(
+                {"success": False, "message": f"Error fetching teammates: {str(e)}"}
+            ),
+            500,
+        )
+        
+@user_bp.route("/invite-user", methods=["POST"])
+def invite_user():
+    try:
+        req = request.get_json()
+        current_user = get_current_user_object()
+
+        new_invitation = TeamInvitation(
+            inviter_id = current_user.user_id,
+            invitee_id = req["user_id"],
+            status = "P",
+            date_created = datetime.now(),
+            date_updated = datetime.now()
+        )
+        
+        db.session.add(new_invitation)
+        db.session.commit()
+
+        # Notify invited user by email
+        invitee = Users.query.filter(Users.user_id == req["user_id"]).first()
+
+        if invitee and invitee.email:
+            try:
+                msg = Message(
+                    subject = "You have been invited!",
+                    recipients = [invitee.email],
+                    body = (
+                        f"Hello {invitee.username},\n\n"
+                        f"{current_user.username} has invited you to join their team.\n\n"
+                        f"Please log in to accept or decline the invitation.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {invitee.username},</p>"
+                        f"<p><b>{current_user.username}</b> has invited you to join their team.</p>"
+                        f"<p>Please log in to accept or decline the invitation.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
+        
+        return jsonify({
+            "success": True,
+            "message": "User invited successfully"
+        }), 200
+        
+    except Exception as e:
+        return (
+            jsonify({
+                "success": False, 
+                "message": f"Error fetching users: {str(e)}"
+            }), 500
+        )
+        
+@user_bp.route("/remove-user-invitation", methods=["POST"])
+def remove_user_invitation():
+    try:
+        req = request.get_json()
+        query = TeamInvitation.query
+
+        invitatee_to_remove = query.filter(
+            TeamInvitation.invitee_id == req["user_id"]
+        ).first()
+
+        if invitatee_to_remove is None:
+            return jsonify({
+                "success": False,
+                "message": "Invites not found"
+            }), 404
+        
+        if invitatee_to_remove == "A":
+            return jsonify({
+                "success": False,
+                "message": "Cannot remove invites with status Active"
+            }), 500
+        
+        db.session.delete(invitatee_to_remove)
+        db.session.commit()
+
+        return jsonify({
+                "success": True,
+                "messages": "Invitee successfully removed"
+            }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error removing user: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/accept-invites", methods=["POST"])
+def accept_invites():
+    try:
+        current_user = get_current_user_object()
+        req = request.get_json()
+        query = TeamInvitation.query
+
+        team_invitation = query.filter(
+            TeamInvitation.inviter_id == req["user_id"], TeamInvitation.status == "P", TeamInvitation.invitee_id == current_user.user_id
+        ).first()
+
+        if team_invitation is None:
+            return jsonify({
+                "success": False,
+                "message": "Invites not found"
+            }), 404
+        
+        if team_invitation == "A":
+            return jsonify({
+                "success": False,
+                "message": "Cannot accept invites with status Active"
+            }), 500
+        
+        team_invitation.status = "A"
+        team_invitation.date_updated = datetime.now()
+
+        get_inviter_team = Teams.query.filter(
+            Teams.member_id.ilike(f"%{req['user_id']}%")
+        ).first()
+
+        if get_inviter_team is None:
+            return jsonify({
+                "success": False,
+                "message": "Team not found"
+            }), 404
+        
+        get_inviter_team.member_id += f",{current_user.user_id}"
+
+        db.session.commit()
+
+        # Notify inviter user by email
+        inviter = Users.query.filter(Users.user_id == req["user_id"]).first()
+
+        if inviter and inviter.email:
+            try:
+                msg = Message(
+                    subject = "Invitation Accepted!",
+                    recipients = [inviter.email],
+                    body = (
+                        f"Hello {inviter.username},\n\n"
+                        f"Good news! {current_user.username} has accepted your invitation to join your team.\n\n"
+                        f"Check Teammates List to check your team member.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {inviter.username},</p>"
+                        f"<p>Good news! <b>{current_user.username}</b> has accepted your invitation to join your team.</p>"
+                        f"<p>Check <b>Teammates List</b> to check your team member.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
+
+        return jsonify({
+            "success": True,
+            "messages": "Invites successfully accepted"
+        }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/reject-invites", methods=["POST"])
+def reject_invites():
+    try:
+        req = request.get_json()
+        current_user = get_current_user_object()
+        query = TeamInvitation.query
+
+        invitation_to_remove = query.filter(
+            TeamInvitation.inviter_id == req["user_id"], TeamInvitation.status == "P", TeamInvitation.invitee_id == current_user.user_id
+        ).first()
+
+        if invitation_to_remove is None:
+            return jsonify({
+                "success": False,
+                "message": "Invites not found"
+            }), 404
+        
+        if invitation_to_remove == "A":
+            return jsonify({
+                "success": False,
+                "message": "Cannot reject invites with status Active"
+            }), 500
+        
+        db.session.delete(invitation_to_remove)
+        db.session.commit()
+
+        # Notify inviter user by email
+        inviter = Users.query.filter(Users.user_id == req["user_id"]).first()
+
+        if inviter and inviter.email:
+            try:
+                msg = Message(
+                    subject = "Invitation Rejected",
+                    recipients = [inviter.email],
+                    body = (
+                        f"Hello {inviter.username},\n\n"
+                        f"We’d like to let you know that {current_user.username} has declined your invitation to join the team.\n\n"
+                        f"You can invite other members from the Recommendation List.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {inviter.username},</p>"
+                        f"<p>We’d like to let you know that <b>{current_user.username}</b> has declined your invitation to join the team.</p>"
+                        f"<p>You can invite other members from the <b>Recommendation</b> List.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
+
+        return jsonify({
+                "success": True,
+                "messages": "Invites successfully removed"
+            }), 200
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
+            500,
+        )
+    
+@user_bp.route("/check-is-have-team", methods=["POST"])
+def check_is_have_team():
+    try:
+        current_user = get_current_user_object()
+        query = Teams.query
+
+        is_have_team = query.filter(
+            Teams.member_id.ilike(f"%{current_user.user_id}%")
+        ).first()
+
+        if is_have_team is None:
+            return jsonify({
+                "success": False,
+                "message": "User doesn't have team yet"
+            }), 200
+        
+        return jsonify({
+            "success": True,
+            "message": "User registered in team"
+        })
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error checking: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/remove-user-teammates", methods=["POST"])
+def remove_user():
+    try:
+        data = request.get_json()
+        target_user_id = str(data.get("user_id"))
+        query = Teams.query
+
+        if not target_user_id:
+            return jsonify({"success": False, "message": "User ID is required"}), 400
+
+        current_user = get_current_user_object()
+        if not current_user:
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        member_to_delete = query.filter(
+            Teams.member_id.ilike(f"%{target_user_id}%")
+        ).first()
+
+        if not member_to_delete:
+            return (
+                jsonify(
+                    {"success": False, "message": "This member doesnt exist in the team"}
+                ),
+                404,
+            )
+        
+        member_ids = member_to_delete.member_id.split(",")
+
+        if str(target_user_id) in member_ids:
+            member_ids.remove(str(target_user_id))
+
+        member_to_delete.member_id = ",".join(member_ids)
+
+        member_to_delete.date_updated = datetime.now()
+
+        db.session.commit()
+
+        # Notify removed member by email
+        invitee = Users.query.filter(Users.user_id == data["user_id"]).first()
+
+        if invitee and invitee.email:
+            try:
+                msg = Message(
+                    subject = "You Have Been Removed from the Team",
+                    recipients = [invitee.email],
+                    body = (
+                        f"Hello {invitee.username},\n\n"
+                        f"We’d like to inform you that you have been removed from the team by {current_user.username}.\n\n"
+                        f"You can explore the Recommendation List to find and join other teams.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {invitee.username},</p>"
+                        f"<p>We’d like to inform you that you have been removed from the team by <b>{current_user.username}</b>.</p>"
+                        f"<p>You can explore the <b>Recommendation</b> to find and join other teams.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
+
+        return (
+            jsonify(
+                {"success": True, "message": f"Success removed user {target_user_id}"}
+            ),
+            200,
+        )
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error deleting user: {str(e)}"}),
+            500,
+        )
+    
 @user_bp.route("/logout", methods=["POST"])
 def logout():
     session.clear()
@@ -167,7 +653,7 @@ def logout():
     res.set_cookie("session", "", expires=0, samesite="None", secure=True)
     return res
 
-@user_bp.route("/api/user/submit-register-data", methods=["POST"])
+@user_bp.route("/submit-register-data", methods=["POST"])
 def create_user():
     try:
         data = request.get_json()
@@ -276,5 +762,67 @@ def create_user():
         db.session.rollback()
         return (
             jsonify({"success": False, "message": f"Error creating user: {str(e)}"}),
+            500,
+        )
+        
+@user_bp.route("/edit-user", methods=["POST"])
+def edit_user():
+    try:
+        data = request.get_json()
+        query = Users.query
+
+        if " " in data["username"]:
+            return jsonify({
+                "success": False, 
+                "message": "Username cannot contain spaces"
+            }), 400
+
+        if data["email"].find("@") == -1:
+            return jsonify({"success": False, "message": "Invalid email format"}), 400
+
+        user = query.filter_by(user_id=data["user_id"]).first()
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        # with db.session.no_autoflush:
+        existing_username = query.filter(
+            Users.username.ilike(f"%{data['username']}%"),
+            Users.user_id != data['user_id']
+        ).first()
+        
+        existing_email = query.filter(
+            Users.email == data['email'],
+            Users.user_id != data['user_id']
+        ).first()
+
+        if existing_username or existing_email:
+            return jsonify({
+                'success': False,
+                'message': 'Username or email already exist'
+            }), 500
+
+        user.username = data["username"],
+        user.email = data["email"],
+        user.gender = data["gender"],
+        user.semester = data["semester"],
+        user.field_of_preference = data["field_of_preference"]
+        user.date_updated=datetime.now()
+
+        db.session.commit()
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": "Edit user successfully",
+                    "user": user.to_dict(),
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error editing user: {str(e)}"}),
             500,
         )
