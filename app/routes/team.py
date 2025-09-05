@@ -134,6 +134,69 @@ def delete_team():
         
     except Exception as e:
         return error_response(f"Error deleting team: {str(e)}", status=500)
+    
+@team_bp.route("/leave-team", methods=["POST"])
+def leave_team():
+    try:
+        current_user = get_current_user_object()
+        current_user_str = str(current_user.user_id)
+        query = Teams.query
+
+        current_team = query.filter(
+            Teams.member_id.ilike(f"%{current_user_str}%")
+        ).first()
+
+        if current_team is None:
+            return error_response("Team not found", status=404)
+
+        if current_team.leader_id == current_user.user_id:
+            return error_response("Leader cannot leave the team, please delete the team instead", status=406)
+
+        member_ids = [mid.strip() for mid in current_team.member_id.split(",") if mid.strip().isdigit()]
+        
+        if current_user_str in member_ids:
+            member_ids.remove(current_user_str)
+            current_team.member_id = ",".join(member_ids)
+            current_team.date_updated = datetime.now()
+            db.session.commit()
+            
+            # Notify all team members by email
+            members = Users.query.filter(Users.user_id.in_(member_ids)).all()
+
+            for member in members:
+                if member and member.email:
+                    try:
+                        msg = Message(
+                            subject="Someone Left the Team",
+                            recipients=[member.email],
+                            body=(
+                                f"Hello {member.username},\n\n"
+                                f"{current_user.username} has left the team {current_team.team_name}.\n\n"
+                                f"Please check your team members list for updated information.\n\n"
+                                f"Best regards,\nYour Team"
+                            ),
+                            html=(
+                                f"<p>Hello {member.username},</p>"
+                                f"<p><b>{current_user.username}</b> has left the team <b>{current_team.team_name}</b>.</p>"
+                                f"<p>Please check your team members list for updated information.</p>"
+                                f"<p>Best regards,<br><b>Your Team</b></p>"
+                            )
+                        )
+                        threading.Thread(
+                            target=send_async_email,
+                            args=(current_app._get_current_object(), msg)
+                        ).start()
+
+                    except Exception as mail_error:
+                        print(f"Email not sent to {member.username} ({member.email}): {mail_error}")
+
+            return success_response("Successfully left the team", status=200)
+        else:
+            return error_response("You are not a member of this team", status=500)
+        
+        
+    except Exception as e:
+        return error_response(f"Error leaving team: {str(e)}", status=500)
         
 @team_bp.route("/add-wishlist-competition", methods=["POST"])
 def add_wishlist_competition():
