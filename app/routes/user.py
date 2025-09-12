@@ -908,3 +908,32 @@ def edit_user():
             jsonify({"success": False, "message": f"Error editing user: {str(e)}"}),
             500,
         )
+        
+@user_bp.route("/change-password", methods=["POST"])
+def change_password():
+    try:
+        data = request.get_json()
+        current_user = get_current_user_object()
+        old_password = data.get("old_password")
+        new_password = data.get("new_password")
+        
+        if len(new_password) < 4:
+            return error_response("New password must be at least 4 characters long", status=406)
+        
+        if old_password is None or new_password is None:
+            return error_response("Password cannot be null", status=500)
+
+        if not check_password_hash(current_user.password, old_password):
+            return error_response("Old password is incorrect", status=401)
+
+        new_hashed_password = generate_password_hash(new_password, method='pbkdf2:sha256', salt_length=16)
+
+        current_user.password = new_hashed_password
+        current_user.date_updated = datetime.now()
+        
+        db.session.commit()
+
+        return success_response("Password changed successfully", status=200)
+
+    except Exception as e:
+        return error_response(f"Error changing password: {str(e)}", status=500)
