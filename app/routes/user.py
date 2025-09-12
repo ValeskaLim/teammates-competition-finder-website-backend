@@ -6,6 +6,8 @@ from app.models import Users, Teams, TeamInvitation
 from app.extensions import db
 from flask_mail import Message
 import threading
+import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.routes.generic import send_async_email, check_is_already_have_team
 from app.utils.response import success_response, error_response
 
@@ -51,6 +53,7 @@ def get_current_user():
                     "role": user.role,
                     "field_of_preference": user.field_of_preference,
                     "major": user.major,
+                    "is_verified": user.is_verified,
                 }
             }
         ),
@@ -213,20 +216,37 @@ def get_invitees_user():
             500,
         )
     
-@user_bp.route("/validate-user", methods=["POST"])
-def validate_user():
+@user_bp.route("/login", methods=["POST"])
+def login():
     try:
         req = request.get_json()
 
-        is_user_exist = Users.query.filter(
-            (Users.email == req["email"]) & (Users.password == req["password"])
-        ).first()
-
+        is_user_exist = Users.query.filter(Users.email == req["email"]).first()
+        
+        # Double checking in case old password format is used
         if is_user_exist is None:
-            return (
-                jsonify({"success": False, "message": f"Invalid email or password"}),
-                401,
-            )
+            return jsonify({
+                "success": False,
+                "message": "Invalid email or password"
+            }), 401
+            
+        is_credential_valid = (
+            check_password_hash(is_user_exist.password, req["password"])
+            if is_user_exist.password.startswith("pbkdf2:sha256:")
+            else is_user_exist.password == req["password"]
+        )\
+            
+        if not is_credential_valid:
+            return jsonify({
+                "success": False,
+                "message": "Invalid email or password"
+            }), 401
+            
+        if not is_user_exist.is_verified:
+            return jsonify({
+                "success": False,
+                "message": "Please verify your email before logging in"
+            }), 401
 
         session["user_id"] = is_user_exist.user_id
         # session.permanent = True
@@ -718,9 +738,13 @@ def create_user():
                 400,
             )
 
+        hashed_password = generate_password_hash(data["password"], method='pbkdf2:sha256', salt_length=16)
+        
+        verification_token = secrets.token_urlsafe(16)
+
         new_user = Users(
             username=data["username"],
-            password=data["password"],
+            password=hashed_password,
             email=data["email"],
             role="normal",
             fullname=data["fullname"],
@@ -729,17 +753,47 @@ def create_user():
             major="Computer Science",
             field_of_preference=data["field_of_preference"],
             date_created=datetime.now(),
-            date_updated=datetime.now()
+            date_updated=datetime.now(),
+            token=verification_token,
+            token_expiration=datetime.now() + timedelta(hours=1),
+            is_verified=False,
         )
 
         db.session.add(new_user)
         db.session.commit()
+        
+        # Send verification email
+        verification_link = f"http://localhost:5173/verify-email/{verification_token}"
+        try:
+            msg = Message(
+                subject="Verify Your Email",
+                recipients=[data["email"]],
+                body=(
+                    f"Hello {new_user.username},\n\n"
+                    f"Please verify your email by clicking the link below:\n"
+                    f"{verification_link}\n\n"
+                    f"This link will expire in 1 hour.\n\n"
+                    f"Best regards,\nSunib HALL"
+                ),
+                html=(
+                    f"<p>Hello {new_user.username},</p>"
+                    f"<p>Please verify your email by clicking the link below:</p>"
+                    f"<p><a href='{verification_link}'>{verification_link}</a></p>"
+                    f"<p>This link will expire in 1 hour.</p>"
+                    f"<p>Best regards,<br><b>Sunib HALL</b></p>"
+                ),
+            )
+            
+            threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+            
+        except Exception as mail_error:
+            print(f"Verification email not sent to {new_user.email}: {mail_error}")
 
         return (
             jsonify(
                 {
                     "success": True,
-                    "message": "User created successfully",
+                    "message": "Email verification sent. Please check your email.",
                     "user_id": new_user.user_id,
                     "user": new_user.to_dict(),
                 }
@@ -764,6 +818,34 @@ def create_user():
             jsonify({"success": False, "message": f"Error creating user: {str(e)}"}),
             500,
         )
+        
+@user_bp.route("/verify-email", methods=["POST"])
+def verify_email():
+    try:
+        req = request.get_json()
+        token = req.get("token")
+        user = Users.query.filter(Users.token == token).first()
+        
+        print(user, flush=True)
+        
+        if user is None:
+            return error_response("Invalid token", status=500)
+            
+        if user.token_expiration < datetime.now():
+            return error_response("Token expired", status=500)
+            
+        user.is_verified = True
+        user.token = None
+        user.token_expiration = None
+        user.date_updated = datetime.now()
+        
+        db.session.commit()
+        
+        return success_response("Email successfully verified", status=200)
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Error verifying email: {str(e)}", status=500)
         
 @user_bp.route("/edit-user", methods=["POST"])
 def edit_user():
