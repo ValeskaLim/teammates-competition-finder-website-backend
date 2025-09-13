@@ -16,10 +16,10 @@ class Users(db.Model):
     semester = db.Column(db.Integer, nullable=False)
     major = db.Column(db.String(30), nullable=False)
     field_of_preference = db.Column(db.String(500), nullable=False)
-    date_created = db.Column(db.DateTime(timezone=False), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=False), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
     token = db.Column(db.String(255), nullable=True)
-    token_expiration = db.Column(db.DateTime(timezone=False), nullable=True)
+    token_expiration = db.Column(db.DateTime(timezone=True), nullable=True)
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
 
     sent_invitations = db.relationship(
@@ -62,8 +62,8 @@ class Competition(db.Model):
     description = db.Column(db.String(500), nullable=False)
     type = db.Column(db.String(100), nullable=False)
     slot = db.Column(db.Integer, nullable=False)
-    date_created = db.Column(db.DateTime(timezone=False), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=False), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
         return f"<Competition {self.name}>"
@@ -88,8 +88,8 @@ class Teams(db.Model):
     team_name = db.Column(db.String(100), nullable=False)
     competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"), nullable=True)
     leader_id = db.Column(db.Integer)
-    date_created = db.Column(db.DateTime(timezone=False), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=False), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
         return f"<Teams {self.team_id}>"
@@ -117,8 +117,8 @@ class TeamInvitation(db.Model):
     inviter_id = db.Column(db.Integer, db.ForeignKey("users.user_id"))
     invitee_id = db.Column(db.Integer, db.ForeignKey("users.user_id"))
     status = db.Column(db.String(30), nullable=False)
-    date_created = db.Column(db.DateTime(timezone=False), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=False))
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True))
 
     def __repr__(self):
         return f"<TeamInvitation {self.team_invitation_id}>"
