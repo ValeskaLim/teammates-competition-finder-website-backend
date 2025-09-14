@@ -1,9 +1,12 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_from_directory
 from datetime import datetime
 from app.extensions import db
 from app.models import Competition, TeamInvitation
-from app.routes.generic import get_current_user_object
+from app.routes.generic import MAX_CONTENT_LENGTH, UPLOAD_FOLDER, allowed_file, get_current_user_object
 from app.utils.response import success_response, error_response
+from werkzeug.utils import secure_filename
+import os
+import uuid
 
 competition_bp = Blueprint('competition', __name__, url_prefix="/competition")
 
@@ -49,39 +52,70 @@ def get_competititon_by_id():
 @competition_bp.route("/add", methods=["POST"])
 def add_competition():
     try:
-        req = request.get_json()
-
-        required_fields = ["title", "date", "status", "description", "type", "slot"]
-
-        for field in required_fields:
-            if field not in req or req[field] == "":
-                return error_response(f"Missing or empty required field: {field[0].upper() + field[1:]}", status=400)
-
-        if req["slot"] <= 0:
-            return error_response("Slot must be greater than zero", status=406)
+        title = request.form.get("title")
+        date = request.form.get("date")
+        status = request.form.get("status")
+        description = request.form.get("description")
+        category = request.form.get("category")
+        min_member = request.form.get("min_member")
+        max_member = request.form.get("max_member")
+        poster = request.files.get("poster")
         
-        if len(req["description"]) > 500:
-            return error_response("Description cannot exceed 500 characters", status=406)
+        min_member = int(min_member)
+        max_member = int(max_member)
+
+        required_fields = [title, date, status, description, category, min_member, max_member]
+        field_names = ["Title", "Date", "Status", "Description", "Category", "Min member", "Max member"]
+
+        for f, name in zip(required_fields, field_names):
+            if not f:
+                return error_response(f"Missing or empty required field: {name}", status=400)
+            
+        if not poster or poster.filename == "":
+            return error_response("Poster is required", status=400)
+            
+        if not allowed_file(poster.filename):
+            return error_response("Only .jpg, .jpeg, .png files are allowed", status=400)
+        
+        poster.seek(0, os.SEEK_END)
+        if poster.tell() > MAX_CONTENT_LENGTH:
+            return error_response("Poster cannot exceed 5 MB", status=400)
+        poster.seek(0)
+
+        if min_member <= 0:
+            return error_response("Min member must be greater than zero", status=406)
+
+        if max_member <= 0:
+            return error_response("Max member must be greater than zero", status=406)
+        
+        if min_member > max_member:
+            return error_response("Min member cannot be greater than max member", status=406)
+
+        if len(description) > 1000:
+            return error_response("Description cannot exceed 1000 characters", status=406)
+
+        filename = secure_filename(os.path.basename(poster.filename))
+        filename = f"{uuid.uuid4().hex}_{filename}"
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        poster.save(file_path)
 
         new_competition = Competition(
-            title = req["title"],
-            date = req["date"],
-            status = req["status"],
-            description = req["description"],
-            type = req["type"],
-            slot = req["slot"],
-            date_created = datetime.now(),
-            date_updated = datetime.now(),
+            title=title,
+            date=date,
+            status=status,
+            description=description,
+            category=category,
+            min_member=min_member,
+            max_member=max_member,
+            poster=filename,
+            date_created=datetime.now(),
+            date_updated=datetime.now(),
         )
 
         db.session.add(new_competition)
         db.session.commit()
 
         return success_response("Competition created successfully", data=new_competition.to_dict(), status=200)
-
-    except Exception as e:
-        return error_response(f"Error adding competition: {str(e)}", status=500)
-
 
     except Exception as e:
         return error_response(f"Error adding competition: {str(e)}", status=500)
@@ -110,29 +144,76 @@ def remove_competition():
 @competition_bp.route("/edit-competition", methods=['POST'])
 def edit_competition():
     try:
-        data = request.get_json()
+        competition_id = request.form.get("competition_id")
+        title = request.form.get("title")
+        date = request.form.get("date")
+        status = request.form.get("status")
+        description = request.form.get("description")
+        category = request.form.get("category")
+        min_member = request.form.get("min_member")
+        max_member = request.form.get("max_member")
+        poster = request.files.get("poster")
+        
+        competition_id = int(competition_id)
+        min_member = int(min_member)
+        max_member = int(max_member)
+        
         query = Competition.query
 
         current_competition = query.filter(
-            Competition.competition_id == data['competition_id']
+            Competition.competition_id == competition_id
         ).first()
 
         if current_competition is None:
             return error_response("Competition not found", status=404)
+        
+        if min_member <= 0 or max_member <= 0:
+            return error_response("Member count must be greater than zero", status=406)
 
-        current_competition.title = data['title']
-        current_competition.date = data['date']
-        current_competition.status = data['status']
-        current_competition.type = data['type']
-        current_competition.slot = data['slot']
-        current_competition.description = data['description']
+        if min_member > max_member:
+            return error_response("Min member cannot be greater than max member", status=406)
+        
+        if len(description) > 1000:
+            return error_response("Description cannot exceed 1000 characters", status=406)
+
+        # Poster replacement is optional
+        if poster and poster.filename.strip():
+            if not allowed_file(poster.filename):
+                return error_response("Only .jpg, .jpeg, .png files are allowed", status=400)
+
+            poster.seek(0, os.SEEK_END)
+            if poster.tell() > MAX_CONTENT_LENGTH:
+                return error_response("Poster cannot exceed 5 MB", status=400)
+            poster.seek(0)
+
+            # remove old poster if exists
+            if current_competition.poster:
+                old_path = os.path.join(UPLOAD_FOLDER, current_competition.poster)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+                    print("Old path: ", old_path, flush=True)
+
+            # save new one
+            filename = secure_filename(os.path.basename(poster.filename))
+            filename = f"{uuid.uuid4().hex}_{filename}"
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            poster.save(file_path)
+
+            current_competition.poster = filename
+
+        current_competition.title = title
+        current_competition.date = date
+        current_competition.status = status
+        current_competition.category = category
+        current_competition.min_member = min_member
+        current_competition.max_member = max_member
+        current_competition.description = description
         current_competition.date_updated = datetime.now()
-
 
         with db.session.no_autoflush:
             existing_competititon = query.filter(
-                Competition.title == data['title'], 
-                Competition.competition_id != data['competition_id']
+                Competition.title == title,
+                Competition.competition_id != competition_id
             ).first()
 
         if existing_competititon:
@@ -144,3 +225,14 @@ def edit_competition():
 
     except Exception as e:
         return error_response(f"Error edit competition: {str(e)}", status=500)
+    
+@competition_bp.route("/uploads/<filename>", methods=['GET'])
+def get_uploaded_file(filename):
+    """
+    Serve competition poster files.
+    """
+    print("Serving file:", os.path.join(UPLOAD_FOLDER, filename), flush=True)
+    try:
+        return send_from_directory(UPLOAD_FOLDER, filename)
+    except Exception as e:
+        return error_response(f"File not found: {str(e)}", status=404)

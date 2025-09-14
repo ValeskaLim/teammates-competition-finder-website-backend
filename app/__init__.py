@@ -14,7 +14,7 @@ def create_app():
         app,
         origins="http://localhost:5173",
         supports_credentials=True,
-        methods=["POST"],
+        methods=["POST", "GET"],
     )
 
     db.init_app(app)

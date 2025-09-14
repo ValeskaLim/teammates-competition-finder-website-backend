@@ -2,6 +2,13 @@ from flask import session, request
 from app.models import Users, Teams
 from app.extensions import db, mail
 import jwt
+import os
+
+UPLOAD_FOLDER = "/app/uploads"
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def get_current_user_object():
     user_id = session.get("user_id")
@@ -36,3 +43,6 @@ def check_is_already_have_team(user_id):
     ).first()
 
     return is_have_team is not None
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
