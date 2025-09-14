@@ -21,6 +21,7 @@ class Users(db.Model):
     token = db.Column(db.String(255), nullable=True)
     token_expiration = db.Column(db.DateTime(timezone=True), nullable=True)
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    profile_picture = db.Column(db.String(255), nullable=True)
 
     sent_invitations = db.relationship(
         "TeamInvitation",
@@ -60,10 +61,12 @@ class Competition(db.Model):
     date = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(3), nullable=False)
     description = db.Column(db.String(500), nullable=False)
-    type = db.Column(db.String(100), nullable=False)
-    slot = db.Column(db.Integer, nullable=False)
+    category = db.Column(db.String(100), nullable=False)
+    min_member = db.Column(db.Integer, nullable=True)
+    max_member = db.Column(db.Integer, nullable=True)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
+    poster = db.Column(db.String(255), nullable=True)
 
     def __repr__(self):
         return f"<Competition {self.name}>"
@@ -75,8 +78,9 @@ class Competition(db.Model):
             "date": self.date.strftime('%Y-%m-%d') if self.date else None,
             "status": self.status,
             "description": self.description,
-            "type": self.type,
-            "slot": self.slot,
+            "category": self.category,
+            "min_member": self.min_member,
+            "max_member": self.max_member,
         }
 
 
