@@ -8,7 +8,7 @@ from flask_mail import Message
 import threading
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.routes.generic import send_async_email, check_is_already_have_team
+from app.routes.generic import send_async_email, check_is_already_have_team, now_jakarta
 from app.utils.response import success_response, error_response
 
 user_bp = Blueprint('user', __name__, url_prefix="/user")
@@ -752,10 +752,10 @@ def create_user():
             semester=data["semester"],
             major="Computer Science",
             field_of_preference=data["field_of_preference"],
-            date_created=datetime.now(),
-            date_updated=datetime.now(),
+            date_created=now_jakarta(),
+            date_updated=now_jakarta(),
             token=verification_token,
-            token_expiration=datetime.now() + timedelta(hours=1),
+            token_expiration=now_jakarta() + timedelta(hours=1),
             is_verified=False,
         )
 
@@ -831,7 +831,7 @@ def verify_email():
         if user is None:
             return error_response("Invalid token", status=500)
             
-        if user.token_expiration < datetime.now():
+        if user.token_expiration < now_jakarta():
             return error_response("Token expired", status=500)
             
         user.is_verified = True

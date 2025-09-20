@@ -10,7 +10,7 @@ class Config:
     
     # Adjust DB_HOST based on environment
     if ENVIRONMENT == "docker":
-        DB_HOST = "host.docker.internal"
+        DB_HOST = os.getenv('DB_HOST', 'db')
     else:
         DB_HOST = os.getenv("DB_HOST", "localhost")
     

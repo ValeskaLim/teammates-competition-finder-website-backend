@@ -7,3 +7,4 @@ flask-cors
 pyjwt
 numpy
 Flask-Mail
+pytz
