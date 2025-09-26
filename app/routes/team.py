@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime
 from app.extensions import db
-from app.models import Teams, Users
+from app.models import TeamInvitation, Teams, Users
 from app.routes.generic import get_current_user_object
 from flask_mail import Message
 import threading
@@ -45,6 +45,21 @@ def check_any_competitions_joined():
         return success_response("User's team has joined a competition", data={"hasJoined": True}, status=200)
     except Exception as e:
         return error_response(f"Error fetching users: {str(e)}", status=500)
+    
+@team_bp.route("/check-number-invitations", methods=["POST"])
+def check_number_invitation():
+    try:
+        current_user = get_current_user_object()
+        query = TeamInvitation.query
+
+        invitation_count = query.filter(
+            TeamInvitation.inviter_id == current_user.user_id, TeamInvitation.status == "P"
+        ).count()
+
+        return success_response("Invitation count fetched successfully", data={"count": invitation_count}, status=200)
+
+    except Exception as e:
+        return error_response(f"Error fetching invitation count: {str(e)}", status=500)
 
 @team_bp.route("/create-team", methods=["POST"])
 def create_team():
