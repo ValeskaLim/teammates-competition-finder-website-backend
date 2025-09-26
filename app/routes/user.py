@@ -8,7 +8,7 @@ from flask_mail import Message
 import threading
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.routes.generic import send_async_email, check_is_already_have_team
+from app.routes.generic import send_async_email, check_is_already_have_team, now_jakarta
 from app.utils.response import success_response, error_response
 
 user_bp = Blueprint('user', __name__, url_prefix="/user")
@@ -752,10 +752,10 @@ def create_user():
             semester=data["semester"],
             major="Computer Science",
             field_of_preference=data["field_of_preference"],
-            date_created=datetime.now(),
-            date_updated=datetime.now(),
+            date_created=now_jakarta(),
+            date_updated=now_jakarta(),
             token=verification_token,
-            token_expiration=datetime.now() + timedelta(hours=1),
+            token_expiration=now_jakarta() + timedelta(hours=1),
             is_verified=False,
         )
 
@@ -831,7 +831,7 @@ def verify_email():
         if user is None:
             return error_response("Invalid token", status=500)
             
-        if user.token_expiration < datetime.now():
+        if user.token_expiration < now_jakarta():
             return error_response("Token expired", status=500)
             
         user.is_verified = True
@@ -937,3 +937,107 @@ def change_password():
 
     except Exception as e:
         return error_response(f"Error changing password: {str(e)}", status=500)
+    
+@user_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    try:
+        data = request.get_json()
+        email = data.get("email")
+        
+        if email is None:
+            return error_response("Email cannot be null", status=500)
+        
+        user = Users.query.filter(Users.email == email).first()
+        if user is None:
+            return error_response("User not found", status=404)
+
+        reset_token = secrets.token_urlsafe(16)
+        
+        user.token = reset_token
+        user.token_expiration = now_jakarta() + timedelta(hours=1)
+        user.date_updated = datetime.now()
+
+        db.session.commit()
+
+        reset_link = f"http://localhost:5173/reset-password-final/{reset_token}"
+        try:
+            msg = Message(
+                subject="Reset Your Password",
+                recipients=[data["email"]],
+                body=(
+                    f"Hello {user.username},\n\n"
+                    f"You just requested a password reset\n"
+                    f"Please reset your password by clicking the link below:\n"
+                    f"{reset_link}\n\n"
+                    f"This link will expire in 1 hour.\n\n"
+                    f"Best regards,\nSunib HALL"
+                ),
+                html=(
+                    f"<p>Hello {user.username},</p>"
+                    f"<p>You just requested a password reset</p>"
+                    f"<p>Please reset your password by clicking the link below:</p>"
+                    f"<p><a href='{reset_link}'>{reset_link}</a></p>"
+                    f"<p>This link will expire in 1 hour.</p>"
+                    f"<p>Best regards,<br><b>Sunib HALL</b></p>"
+                )
+            )
+            
+            threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+            
+        except Exception as mail_error:
+            print(f"Verification email not sent to {user.email}: {mail_error}")
+
+        return success_response("Password reset email sent", status=200)
+
+    except Exception as e:
+        return error_response(f"Error resetting password: {str(e)}", status=500)
+    
+@user_bp.route("/validate-token", methods=["POST"])
+def validate_token():
+    try:
+        data = request.get_json()
+        token = data.get("token")
+        user = Users.query.filter(Users.token == token).first()
+        
+        if user is None:
+            return error_response("Invalid token", status=500)
+            
+        if user.token_expiration < now_jakarta():
+            return error_response("Token expired", status=500)
+        
+        return success_response("Token is valid", status=200)
+        
+    except Exception as e:
+        return error_response(f"Error validating token: {str(e)}", status=500)
+    
+@user_bp.route("/reset-password-final", methods=["POST"])
+def reset_password_final():
+    try:
+        data = request.get_json()
+        token = data.get("token")
+        new_password = data.get("new_password")
+        
+        if len(new_password) < 4:
+            return error_response("New password must be at least 4 characters long", status=406)
+        
+        user = Users.query.filter(Users.token == token).first()
+        
+        if user is None:
+            return error_response("Invalid token", status=500)
+            
+        if user.token_expiration < now_jakarta():
+            return error_response("Token expired", status=500)
+        
+        new_hashed_password = generate_password_hash(new_password, method='pbkdf2:sha256', salt_length=16)
+
+        user.password = new_hashed_password
+        user.token = None
+        user.token_expiration = None
+        user.date_updated = datetime.now()
+        
+        db.session.commit()
+        
+        return success_response("Password has been reset successfully", status=200)
+    
+    except Exception as e:
+        return error_response(f"Error resetting password: {str(e)}", status=500)

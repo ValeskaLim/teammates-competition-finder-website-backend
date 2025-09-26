@@ -3,12 +3,17 @@ from app.models import Users, Teams
 from app.extensions import db, mail
 import jwt
 import os
+import pytz
+from datetime import datetime
 
 UPLOAD_FOLDER = "/app/uploads"
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 MAX_CONTENT_LENGTH = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def now_jakarta():
+    return datetime.now(pytz.timezone('Asia/Jakarta'))
 
 def get_current_user_object():
     user_id = session.get("user_id")
