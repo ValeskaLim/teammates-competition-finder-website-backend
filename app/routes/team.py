@@ -27,6 +27,24 @@ def check_is_leader():
 
     except Exception as e:
         return error_response(f"Error fetching users: {str(e)}", status=500)
+    
+@team_bp.route("/check-any-competitions-joined", methods=["POST"])
+def check_any_competitions_joined():
+    try:
+        current_user = get_current_user_object()
+        current_user_id = str(current_user.user_id)
+        query = Teams.query
+
+        current_team = query.filter(
+            Teams.member_id.ilike(f"%{current_user_id}%")
+        ).first()
+
+        if current_team is None or current_team.competition_id is None:
+            return success_response("User's team has not joined any competition", data={"hasJoined": False}, status=200)
+
+        return success_response("User's team has joined a competition", data={"hasJoined": True}, status=200)
+    except Exception as e:
+        return error_response(f"Error fetching users: {str(e)}", status=500)
 
 @team_bp.route("/create-team", methods=["POST"])
 def create_team():
