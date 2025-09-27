@@ -60,10 +60,11 @@ class Competition(db.Model):
     title = db.Column(db.String(300), nullable=False, unique=True)
     date = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(3), nullable=False)
-    description = db.Column(db.String(1000), nullable=False)
+    description = db.Column(db.String(4000), nullable=False)
     category = db.Column(db.String(100), nullable=False)
     min_member = db.Column(db.Integer, nullable=False)
     max_member = db.Column(db.Integer, nullable=False)
+    original_url = db.Column(db.Text, nullable=True)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
     poster = db.Column(db.String(255), nullable=True)
@@ -81,6 +82,7 @@ class Competition(db.Model):
             "category": self.category,
             "min_member": self.min_member,
             "max_member": self.max_member,
+            "original_url": self.original_url if self.original_url else None,
             "poster": self.poster if self.poster else None,
         }
 
