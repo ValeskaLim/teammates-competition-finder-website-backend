@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, send_from_directory
 from datetime import datetime
 from app.extensions import db
-from app.models import Competition, TeamInvitation
+from app.models import Competition, TeamInvitation, Teams
 from app.routes.generic import MAX_CONTENT_LENGTH, UPLOAD_FOLDER, allowed_file, get_current_user_object
 from app.utils.response import success_response, error_response
 from werkzeug.utils import secure_filename
@@ -48,6 +48,24 @@ def get_competititon_by_id():
 
     except Exception as e:
         return error_response(f"Error fetching competition: {str(e)}", status=500)
+    
+@competition_bp.route("/get-participant-by-id", methods=['POST'])
+def get_participant_by_id():
+    try:
+        data = request.get_json()
+        query = Teams.query
+
+        invitations = query.filter(Teams.competition_id == data['competition_id']).all()
+
+        if not invitations:
+            return success_response("No participants found", data=[], status=200)
+
+        participants = [invitation.to_dict() for invitation in invitations]
+
+        return success_response("Participants retrieved successfully", data=participants, status=200)
+
+    except Exception as e:
+        return error_response(f"Error fetching participants: {str(e)}", status=500)
         
 @competition_bp.route("/add", methods=["POST"])
 def add_competition():
@@ -60,6 +78,7 @@ def add_competition():
         min_member = request.form.get("min_member")
         max_member = request.form.get("max_member")
         poster = request.files.get("poster")
+        original_url = request.form.get("original_url", None)
         
         min_member = int(min_member)
         max_member = int(max_member)
@@ -91,8 +110,8 @@ def add_competition():
         if min_member > max_member:
             return error_response("Min member cannot be greater than max member", status=406)
 
-        if len(description) > 1000:
-            return error_response("Description cannot exceed 1000 characters", status=406)
+        if len(description) > 4000:
+            return error_response("Description cannot exceed 4000 characters", status=406)
 
         filename = secure_filename(os.path.basename(poster.filename))
         filename = f"{uuid.uuid4().hex}_{filename}"
@@ -108,8 +127,9 @@ def add_competition():
             min_member=min_member,
             max_member=max_member,
             poster=filename,
+            original_url=original_url,
             date_created=datetime.now(),
-            date_updated=datetime.now(),
+            date_updated=datetime.now()
         )
 
         db.session.add(new_competition)
@@ -153,6 +173,7 @@ def edit_competition():
         min_member = request.form.get("min_member")
         max_member = request.form.get("max_member")
         poster = request.files.get("poster")
+        original_url = request.form.get("original_url", None)
         
         competition_id = int(competition_id)
         min_member = int(min_member)
@@ -173,8 +194,8 @@ def edit_competition():
         if min_member > max_member:
             return error_response("Min member cannot be greater than max member", status=406)
         
-        if len(description) > 1000:
-            return error_response("Description cannot exceed 1000 characters", status=406)
+        if len(description) > 4000:
+            return error_response("Description cannot exceed 4000 characters", status=406)
 
         # Poster replacement is optional
         if poster and poster.filename.strip():
@@ -209,6 +230,7 @@ def edit_competition():
         current_competition.max_member = max_member
         current_competition.description = description
         current_competition.date_updated = datetime.now()
+        current_competition.original_url = original_url
 
         with db.session.no_autoflush:
             existing_competititon = query.filter(
