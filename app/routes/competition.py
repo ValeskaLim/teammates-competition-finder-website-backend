@@ -78,6 +78,7 @@ def add_competition():
         min_member = request.form.get("min_member")
         max_member = request.form.get("max_member")
         poster = request.files.get("poster")
+        original_url = request.form.get("original_url", None)
         
         min_member = int(min_member)
         max_member = int(max_member)
@@ -109,8 +110,8 @@ def add_competition():
         if min_member > max_member:
             return error_response("Min member cannot be greater than max member", status=406)
 
-        if len(description) > 1000:
-            return error_response("Description cannot exceed 1000 characters", status=406)
+        if len(description) > 4000:
+            return error_response("Description cannot exceed 4000 characters", status=406)
 
         filename = secure_filename(os.path.basename(poster.filename))
         filename = f"{uuid.uuid4().hex}_{filename}"
@@ -126,8 +127,9 @@ def add_competition():
             min_member=min_member,
             max_member=max_member,
             poster=filename,
+            original_url=original_url,
             date_created=datetime.now(),
-            date_updated=datetime.now(),
+            date_updated=datetime.now()
         )
 
         db.session.add(new_competition)
