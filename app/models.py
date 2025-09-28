@@ -95,6 +95,7 @@ class Teams(db.Model):
     team_name = db.Column(db.String(100), nullable=False)
     competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"), nullable=True)
     leader_id = db.Column(db.Integer)
+    is_finalized = db.Column(db.Boolean, default=False, nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
@@ -108,6 +109,7 @@ class Teams(db.Model):
             "team_name": self.team_name,
             "competition_id": self.competition_id,
             "leader_id": self.leader_id,
+            "is_finalized": self.is_finalized,
             "date_created": (
                 self.date_created.isoformat() if self.date_created else None
             ),
@@ -144,4 +146,19 @@ class TeamInvitation(db.Model):
             ),
             "invites": self.inviter.to_dict() if self.inviter else None,
             "invitee": self.invitee.to_dict() if self.invitee else None,
+        }
+        
+class Skills(db.Model):
+    __tablename__ = "skills"
+
+    skill_id = db.Column(db.Integer, primary_key=True)
+    skill_code = db.Column(db.String(50), nullable=False)
+    skill_name = db.Column(db.String(100), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
+
+    def to_dict(self):
+        return {
+            "skill_code": self.skill_code,
+            "skill_name": self.skill_name
         }
