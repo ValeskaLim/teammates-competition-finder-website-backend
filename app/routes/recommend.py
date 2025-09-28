@@ -11,11 +11,18 @@ recommend_bp = Blueprint('recommend', __name__, url_prefix="/recommend")
 def recommend():
     req = request.get_json()
     
-    # Check user is already have team
+    # Validation to use recommend feature
     is_have_team = check_is_already_have_team(req["user_id"])
     
     if is_have_team is False:
         return error_response("You don't have a team yet, please create or join a team first", status=500)
+    
+    is_team_finalized = Teams.query.filter(
+        Teams.leader_id == req["user_id"], Teams.is_finalized == True
+    ).first()
+    
+    if is_team_finalized:
+        return error_response("Your team is already finalized", status=500)
 
     is_leader = Teams.query.filter(
             Teams.leader_id == req["user_id"]

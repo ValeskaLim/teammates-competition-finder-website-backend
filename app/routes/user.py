@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, session, request, current_app, make_respon
 import jwt
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
-from app.models import Users, Teams, TeamInvitation
+from app.models import Skills, Users, Teams, TeamInvitation
 from app.extensions import db
 from flask_mail import Message
 import threading
@@ -115,50 +115,6 @@ def get_user_by_id():
             500,
         )
         
-@user_bp.route("/search", methods=["POST"])
-def search_users():
-    try:
-        data = request.get_json()
-        query = Users.query
-
-        if "major" in data and data["major"]:
-            query = query.filter(Users.major.ilike(f"%{data['major']}%"))
-
-        if "semester" in data and data["semester"]:
-            query = query.filter(Users.semester == data["semester"])
-
-        if "gender" in data and data["gender"]:
-            query = query.filter(Users.gender == data["gender"])
-
-        if "field_of_preference" in data and data["field_of_preference"]:
-            query = query.filter(
-                Users.field_of_preference.ilike(f"%{data['field_of_preference']}%")
-            )
-
-        page = data.get("page", 1)
-        per_page = data.get("per_page", 10)
-
-        users = query.paginate(page=page, per_page=per_page, error_out=False)
-
-        return (
-            jsonify(
-                {
-                    "success": True,
-                    "users": [user.to_dict() for user in users.items],
-                    "total": users.total,
-                    "pages": users.pages,
-                    "current_page": users.page,
-                }
-            ),
-            200,
-        )
-
-    except Exception as e:
-        return (
-            jsonify({"success": False, "message": f"Error searching users: {str(e)}"}),
-            500,
-        )
-        
 @user_bp.route("/get-invites-user", methods=["POST"])
 def get_invites_user():
     try:
@@ -215,7 +171,21 @@ def get_invitees_user():
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
             500,
         )
-    
+        
+@user_bp.route("/get-list-skillset", methods=["POST"])
+def get_list_skillset():
+    try:
+        query = Skills.query
+        skillset = query.all()
+
+        return success_response(data=[skill.to_dict() for skill in skillset], status=200)
+
+    except Exception as e:
+        return (
+            jsonify({"success": False, "message": f"Error fetching skillset: {str(e)}"}),
+            500,
+        )
+
 @user_bp.route("/login", methods=["POST"])
 def login():
     try:
@@ -335,8 +305,8 @@ def invite_user():
             inviter_id = current_user.user_id,
             invitee_id = req["user_id"],
             status = "P",
-            date_created = datetime.now(),
-            date_updated = datetime.now()
+            date_created = now_jakarta(),
+            date_updated = now_jakarta()
         )
         
         db.session.add(new_invitation)
@@ -442,7 +412,7 @@ def accept_invites():
             }), 500
         
         team_invitation.status = "A"
-        team_invitation.date_updated = datetime.now()
+        team_invitation.date_updated = now_jakarta()
 
         get_inviter_team = Teams.query.filter(
             Teams.member_id.ilike(f"%{req['user_id']}%")
@@ -519,7 +489,8 @@ def reject_invites():
                 "message": "Cannot reject invites with status Active"
             }), 500
         
-        db.session.delete(invitation_to_remove)
+        invitation_to_remove.status = "R"
+        invitation_to_remove.date_updated = now_jakarta()
         db.session.commit()
 
         # Notify inviter user by email
@@ -584,83 +555,6 @@ def check_is_have_team():
     except Exception as e:
         return (
             jsonify({"success": False, "message": f"Error checking: {str(e)}"}),
-            500,
-        )
-        
-@user_bp.route("/remove-user-teammates", methods=["POST"])
-def remove_user():
-    try:
-        data = request.get_json()
-        target_user_id = str(data.get("user_id"))
-        query = Teams.query
-
-        if not target_user_id:
-            return jsonify({"success": False, "message": "User ID is required"}), 400
-
-        current_user = get_current_user_object()
-        if not current_user:
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-
-        member_to_delete = query.filter(
-            Teams.member_id.ilike(f"%{target_user_id}%")
-        ).first()
-
-        if not member_to_delete:
-            return (
-                jsonify(
-                    {"success": False, "message": "This member doesnt exist in the team"}
-                ),
-                404,
-            )
-        
-        member_ids = member_to_delete.member_id.split(",")
-
-        if str(target_user_id) in member_ids:
-            member_ids.remove(str(target_user_id))
-
-        member_to_delete.member_id = ",".join(member_ids)
-
-        member_to_delete.date_updated = datetime.now()
-
-        db.session.commit()
-
-        # Notify removed member by email
-        invitee = Users.query.filter(Users.user_id == data["user_id"]).first()
-
-        if invitee and invitee.email:
-            try:
-                msg = Message(
-                    subject = "You Have Been Removed from the Team",
-                    recipients = [invitee.email],
-                    body = (
-                        f"Hello {invitee.username},\n\n"
-                        f"We’d like to inform you that you have been removed from the team by {current_user.username}.\n\n"
-                        f"You can explore the Recommendation List to find and join other teams.\n\n"
-                        f"Best regards,\nYour Team"
-                    ),
-                    html=(
-                        f"<p>Hello {invitee.username},</p>"
-                        f"<p>We’d like to inform you that you have been removed from the team by <b>{current_user.username}</b>.</p>"
-                        f"<p>You can explore the <b>Recommendation</b> to find and join other teams.</p>"
-                        f"<p>Best regards,<br><b>Your Team</b></p>"
-                    )
-                )
-
-                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
-
-            except Exception as mail_error:
-                print("Email not send!")
-
-        return (
-            jsonify(
-                {"success": True, "message": f"Success removed user {target_user_id}"}
-            ),
-            200,
-        )
-
-    except Exception as e:
-        return (
-            jsonify({"success": False, "message": f"Error deleting user: {str(e)}"}),
             500,
         )
     
@@ -837,7 +731,7 @@ def verify_email():
         user.is_verified = True
         user.token = None
         user.token_expiration = None
-        user.date_updated = datetime.now()
+        user.date_updated = now_jakarta()
         
         db.session.commit()
         
@@ -888,7 +782,7 @@ def edit_user():
         user.gender = data["gender"],
         user.semester = data["semester"],
         user.field_of_preference = data["field_of_preference"]
-        user.date_updated=datetime.now()
+        user.date_updated=now_jakarta()
 
         db.session.commit()
 
@@ -929,7 +823,7 @@ def change_password():
         new_hashed_password = generate_password_hash(new_password, method='pbkdf2:sha256', salt_length=16)
 
         current_user.password = new_hashed_password
-        current_user.date_updated = datetime.now()
+        current_user.date_updated = now_jakarta()
         
         db.session.commit()
 
@@ -949,13 +843,13 @@ def reset_password():
         
         user = Users.query.filter(Users.email == email).first()
         if user is None:
-            return error_response("User not found", status=404)
+            return success_response("Password reset email sent", status=200)
 
         reset_token = secrets.token_urlsafe(16)
         
         user.token = reset_token
         user.token_expiration = now_jakarta() + timedelta(hours=1)
-        user.date_updated = datetime.now()
+        user.date_updated = now_jakarta()
 
         db.session.commit()
 
@@ -1033,7 +927,7 @@ def reset_password_final():
         user.password = new_hashed_password
         user.token = None
         user.token_expiration = None
-        user.date_updated = datetime.now()
+        user.date_updated = now_jakarta()
         
         db.session.commit()
         
