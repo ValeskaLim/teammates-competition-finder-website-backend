@@ -19,7 +19,8 @@ def filter_available_user(exclude_id=None):
                 "username": user.username,
                 "semester": user.semester,
                 "gender": "L" if user.gender == "L" else "P",
-                "field_of_preference": [f.strip() for f in user.field_of_preference.split(",") if f.strip()]
+                "field_of_preference": [f.strip() for f in user.field_of_preference.split(",") if f.strip()],
+                "portfolio": user.portfolio if user.portfolio else None
             }
             user_list.append(user_dict)
             

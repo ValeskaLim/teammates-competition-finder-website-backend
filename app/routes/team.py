@@ -121,6 +121,23 @@ def finalize_team():
         
     except Exception as e:
         return error_response(f"Error finalizing team: {str(e)}", status=500)
+    
+@team_bp.route("/request-join", methods=["POST"])
+def request_join():
+    try:
+        req = request.get_json()
+        query = Teams.query
+        current_user = get_current_user_object()
+        
+        team = query.filter(Teams.team_id == req['team_id']).first()
+        
+        if team is None:
+            return error_response("Team not found", status=404)
+        
+        
+        
+    except Exception as e:
+        return error_response(f"Error sending request: {str(e)}", status=500)
         
         
 @team_bp.route("/add-wishlist-competition", methods=["POST"])

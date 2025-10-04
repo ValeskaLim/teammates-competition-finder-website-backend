@@ -22,6 +22,7 @@ class Users(db.Model):
     token_expiration = db.Column(db.DateTime(timezone=True), nullable=True)
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
     profile_picture = db.Column(db.String(255), nullable=True)
+    portfolio = db.Column(db.String(255), nullable=True)
 
     sent_invitations = db.relationship(
         "TeamInvitation",
@@ -50,6 +51,7 @@ class Users(db.Model):
             "semester": self.semester,
             "major": self.major,
             "field_of_preference": self.field_of_preference,
+            "portfolio": self.portfolio,
         }
 
 
@@ -146,6 +148,33 @@ class TeamInvitation(db.Model):
             ),
             "invites": self.inviter.to_dict() if self.inviter else None,
             "invitee": self.invitee.to_dict() if self.invitee else None,
+        }
+        
+class TeamJoin(db.Model):
+    __tablename__ = "team_join"
+
+    team_join_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"))
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.team_id"))
+    status = db.Column(db.String(30), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True))
+
+    def __repr__(self):
+        return f"<TeamJoin {self.team_join_id}>"
+
+    def to_dict(self):
+        return {
+            "team_join_id": self.team_join_id,
+            "user_id": self.user_id,
+            "team_id": self.team_id,
+            "status": self.status,
+            "date_created": (
+                self.date_created.isoformat() if self.date_created else None
+            ),
+            "date_updated": (
+                self.date_updated.isoformat() if self.date_updated else None
+            )
         }
         
 class Skills(db.Model):
