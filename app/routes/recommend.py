@@ -39,7 +39,7 @@ def recommend():
         "id": target_user_record.user_id,
         "semester": target_user_record.semester,
         "gender": "L" if target_user_record.gender == "L" else "P",
-        "field_of_preference": [f.strip() for f in target_user_record.field_of_preference.split(",") if f.strip()]
+        "field_of_preference": [f.strip() for f in target_user_record.field_of_preference.split(",") if f.strip()],
     }
     
     users = filter_available_user(req["user_id"])
@@ -73,7 +73,8 @@ def recommend():
             "gender": user["gender"],
             "semester": user["semester"],
             "field_of_preference": ",".join(user["field_of_preference"]),
-            "similarity": similarity
+            "similarity": similarity,
+            "portfolio": user.get("portfolio", None)
         })
 
     results.sort(key=lambda x: x["similarity"], reverse=True)

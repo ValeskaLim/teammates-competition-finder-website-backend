@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, send_from_directory
 from datetime import datetime
 from app.extensions import db
-from app.models import Competition, TeamInvitation, Teams
+from app.models import Competition, TeamInvitation, Teams, Users
 from app.routes.generic import MAX_CONTENT_LENGTH, UPLOAD_FOLDER, allowed_file, get_current_user_object
 from app.utils.response import success_response, error_response
 from werkzeug.utils import secure_filename
@@ -55,14 +55,30 @@ def get_participant_by_id():
         data = request.get_json()
         query = Teams.query
 
-        invitations = query.filter(Teams.competition_id == data['competition_id']).all()
+        teams = query.filter(Teams.competition_id == data['competition_id']).all()
 
-        if not invitations:
+        if not teams:
             return success_response("No participants found", data=[], status=200)
 
-        participants = [invitation.to_dict() for invitation in invitations]
+        results = []
+        for team in teams:
+            member_ids = [int(mid) for mid in team.member_id.split(",") if mid]
+            members = Users.query.filter(Users.user_id.in_(member_ids)).all()
+            member_list = [member.fullname for member in members]
+            
+            leader = Users.query.get(team.leader_id)
+            leader_name = leader.fullname if leader else None
+            
+            results.append({
+                "team_id": team.team_id,
+                "team_name": team.team_name,
+                "is_finalized": team.is_finalized,
+                "leader_id": team.leader_id,
+                "leader_name": leader_name,
+                "members": member_list
+            })
 
-        return success_response("Participants retrieved successfully", data=participants, status=200)
+        return success_response("Participants retrieved successfully", data=results, status=200)
 
     except Exception as e:
         return error_response(f"Error fetching participants: {str(e)}", status=500)

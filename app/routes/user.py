@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, session, request, current_app, make_response
 import jwt
+import re
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 from app.models import Skills, Users, Teams, TeamInvitation
@@ -40,25 +41,21 @@ def get_current_user():
     if not user:
         return jsonify({"user": None}), 200
 
-    return (
-        jsonify(
-            {
-                "user": {
-                    "user_id": user.user_id,
-                    "username": user.username,
-                    "email": user.email,
-                    "fullname": user.fullname,
-                    "gender": user.gender,
-                    "semester": user.semester,
-                    "role": user.role,
-                    "field_of_preference": user.field_of_preference,
-                    "major": user.major,
-                    "is_verified": user.is_verified,
-                }
-            }
-        ),
-        200,
-    )
+    return jsonify({
+        "user": {
+            "user_id": user.user_id,
+            "username": user.username,
+            "email": user.email,
+            "fullname": user.fullname,
+            "gender": user.gender,
+            "semester": user.semester,
+            "role": user.role,
+            "field_of_preference": user.field_of_preference,
+            "major": user.major,
+            "is_verified": user.is_verified,
+            "portfolio": user.portfolio,
+        }
+    }), 200
 
 @user_bp.route("/get-existing-user", methods=["POST"])
 def get_existing_user():
@@ -745,21 +742,33 @@ def verify_email():
 def edit_user():
     try:
         data = request.get_json()
+        print(data, flush=True)
         query = Users.query
 
+        required_fields = ["username", "email", "field_of_preference", "major"]
+        
+        link_regex = re.compile(r'^(https?:\/\/)?(www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}.*$')
+        
+        for field in required_fields:
+            if field not in data or data[field] == "":
+                return error_response(f"Missing or empty required field: {field[0].upper() + field[1:]}", status=400)
+
         if " " in data["username"]:
-            return jsonify({
-                "success": False, 
-                "message": "Username cannot contain spaces"
-            }), 400
+            return error_response("Username cannot contain spaces", status=400)
 
         if data["email"].find("@") == -1:
-            return jsonify({"success": False, "message": "Invalid email format"}), 400
+            return error_response("Invalid email format", status=400)
+        
+        if data["major"] == " ":
+            return error_response("Major cannot be empty", status=400)
+
+        if data["portfolio"] and not re.match(link_regex, data["portfolio"]):
+            return error_response("Invalid portfolio link format", status=400)
 
         user = query.filter_by(user_id=data["user_id"]).first()
         if not user:
-            return jsonify({"success": False, "message": "User not found"}), 404
-        
+            return error_response("User not found", status=404)
+
         # with db.session.no_autoflush:
         existing_username = query.filter(
             Users.username.ilike(f"%{data['username']}%"),
@@ -772,36 +781,23 @@ def edit_user():
         ).first()
 
         if existing_username or existing_email:
-            return jsonify({
-                'success': False,
-                'message': 'Username or email already exist'
-            }), 500
+            return error_response("Username or email already exist", status=500)
 
         user.username = data["username"],
         user.email = data["email"],
         user.gender = data["gender"],
         user.semester = data["semester"],
         user.field_of_preference = data["field_of_preference"]
+        user.major = data["major"]
+        user.portfolio = data.get("portfolio", None)
         user.date_updated=now_jakarta()
 
         db.session.commit()
 
-        return (
-            jsonify(
-                {
-                    "success": True,
-                    "message": "Edit user successfully",
-                    "user": user.to_dict(),
-                }
-            ),
-            200,
-        )
+        return success_response("Edit user successfully", status=200)
 
     except Exception as e:
-        return (
-            jsonify({"success": False, "message": f"Error editing user: {str(e)}"}),
-            500,
-        )
+        return error_response(f"Error editing user: {str(e)}", status=500)
         
 @user_bp.route("/change-password", methods=["POST"])
 def change_password():
