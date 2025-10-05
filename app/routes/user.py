@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, session, request, current_app, make_respon
 import jwt
 import re
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 from datetime import datetime, timedelta
 from app.models import Skills, Users, Teams, TeamInvitation
 from app.extensions import db
@@ -270,7 +271,12 @@ def get_all_teammates():
             )
 
         team_member = Teams.query.filter(
-            Teams.member_id.ilike(f"%{current_user.user_id}%")
+            or_(
+                Teams.member_id == str(current_user.user_id),
+                Teams.member_id.ilike(f"{current_user.user_id},%"),
+                Teams.member_id.ilike(f"%,{current_user.user_id},%"), 
+                Teams.member_id.ilike(f"%,{current_user.user_id}")
+            )
         ).first()
 
         if team_member is None:

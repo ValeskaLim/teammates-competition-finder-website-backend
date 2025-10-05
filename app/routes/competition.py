@@ -75,7 +75,8 @@ def get_participant_by_id():
                 "is_finalized": team.is_finalized,
                 "leader_id": team.leader_id,
                 "leader_name": leader_name,
-                "members": member_list
+                "members": member_list,
+                "is_full": len(member_list) >= Competition.query.get(data['competition_id']).max_member if Competition.query.get(data['competition_id']) else False
             })
 
         return success_response("Participants retrieved successfully", data=results, status=200)
