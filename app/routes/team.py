@@ -1,4 +1,8 @@
 from flask import Blueprint, jsonify, request, current_app
+import os
+from web3 import Web3
+import time
+from werkzeug.utils import secure_filename
 from datetime import datetime
 from app.extensions import db
 from app.models import Competition, TeamInvitation, TeamJoin, Teams, Users
@@ -9,6 +13,14 @@ from app.routes.generic import send_async_email
 from app.utils.response import success_response, error_response
 
 team_bp = Blueprint('team', __name__, url_prefix="/team")
+
+w3 = Web3(Web3.HTTPProvider(os.environ.get("WEB3_PROVIDER")))
+MINER_ADDRESS = os.environ.get("MINER_ADDRESS")
+MINER_PRIVATE_KEY = os.environ.get("MINER_PRIVATE_KEY")
+CONTRACT_ADDRESS = "0xYourDeployedContractAddress"
+CONTRACT_ABI = [...]
+
+contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
 
 @team_bp.route("/get-list-team-user-request", methods=["POST"])
 def get_list_team_user_request():
@@ -121,32 +133,83 @@ def create_team():
     except Exception as e:
         return error_response(f"Error creating team: {str(e)}", status=500)
     
-@team_bp.route("/finalize-team", methods=["POST"])
-def finalize_team():
+@team_bp.route("/edit-team", methods=["POST"])
+def edit_team():
     try:
-        data = request.get_json()
-        current_user = get_current_user_object()
-        team_query = Teams.query
-        team_invitation_query = TeamInvitation.query
-        
-        current_team = team_query.filter(
-            Teams.team_id == data["team_id"]
+        req = request.get_json()
+        query = Teams.query
+
+        current_team = query.filter(
+            Teams.team_id == req['team_id']
         ).first()
 
         if current_team is None:
             return error_response("Team not found", status=404)
         
-        invitation_to_delete = team_invitation_query.filter((TeamInvitation.inviter_id == current_user.user_id), (TeamInvitation.status == "P")).all()
+        if len(req["description"]) > 500:
+            return error_response("Description exceeds maximum length of 500 characters", status=400)
         
-        for invitation in invitation_to_delete:
-            invitation.status = "C"
-            invitation.date_updated = now_jakarta()
+        if len(req["notes"]) > 500:
+            return error_response("Notes exceeds maximum length of 500 characters", status=400)
 
-        current_team.is_finalized = True
+        current_team.description = req["description"]
+        current_team.notes = req["notes"]
         current_team.date_updated = now_jakarta()
+
         db.session.commit()
 
-        return success_response("Team successfully finalized", status=200)
+        return success_response("Team successfully updated", status=200)
+
+    except Exception as e:
+        return error_response(f"Error updating team: {str(e)}", status=500)
+    
+@team_bp.route("/finalize-team", methods=["POST"])
+def finalize_team():
+    try:
+        team_id = request.form.get("team_id")
+        if not team_id:
+            return error_response("team_id required", status=400)
+
+        team = Teams.query.filter(Teams.team_id == int(team_id)).first()
+        if team is None:
+            return error_response("Team not found", status=404)
+
+        current_user = get_current_user_object()
+        if current_user.user_id != team.leader_id:
+            return error_response("Only the leader can finalize", status=406)
+
+        # Handle proof image
+        proof_file = request.files.get("proof_txn")
+        if not proof_file:
+            return error_response("Proof image required", status=400)
+
+        filename = f"team{team_id}_{int(time.time())}_{secure_filename(proof_file.filename)}"
+        path = os.path.join(current_app.root_path, "uploads/prooftxn", filename)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        proof_file.save(path)
+
+        # Blockchain finalize
+        nonce = w3.eth.get_transaction_count(MINER_ADDRESS)
+        txn = contract.functions.finalizeTeam(int(team_id)).buildTransaction({
+            "from": MINER_ADDRESS,  # Or leader's wallet if custodial
+            "nonce": nonce,
+            "gas": 100000,
+            "gasPrice": w3.eth.gas_price,
+        })
+        signed = w3.eth.account.sign_transaction(txn, MINER_PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        # Save in DB
+        team.is_finalized = True
+        team.txn_hash = receipt.transactionHash.hex()
+        team.proof_txn_path = f"uploads/prooftxn/{filename}"
+        team.date_updated = now_jakarta()
+        db.session.commit()
+
+        return success_response("Team finalized on-chain", {
+            "txn_hash": receipt.transactionHash.hex()
+        })
         
     except Exception as e:
         return error_response(f"Error finalizing team: {str(e)}", status=500)
@@ -173,6 +236,33 @@ def request_join_team():
 
         db.session.add(new_join_request)
         db.session.commit()
+        
+        team_leader = Users.query.get(team.leader_id)
+        requester = Users.query.get(current_user.user_id)
+        
+        if team_leader and requester: 
+            try:
+                msg = Message(
+                    subject = "Request to Join Team",
+                    recipients = [team_leader.email],
+                    body = (
+                        f"Hello {team_leader.username},\n\n"
+                        f"{requester.username} has requested to join your team.\n\n"
+                        f"Please review the request on Teammates List tab.\n\n"
+                        f"Best regards,\{requester.username}"
+                    ),
+                    html=(
+                        f"<p>Hello {team_leader.username},</p>"
+                        f"<p><b>{requester.username}</b> has requested to join your team.</p>"
+                        f"<p>Please review the request on <b>Teammates List tab</b>.</p>"
+                        f"<p>Best regards,<br><b>{requester.username}</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not sent!")
 
         return success_response("Request to join team sent successfully", status=200)
 
@@ -221,6 +311,7 @@ def accept_join_request():
 def reject_join_request():
     try:
         req = request.get_json()
+        current_user = get_current_user_object()
         query = TeamJoin.query
 
         join_request = query.filter(
@@ -234,6 +325,31 @@ def reject_join_request():
         join_request.date_updated = now_jakarta()
 
         db.session.commit()
+        
+        requester = Users.query.get(req['user_id'])
+        team_leader = Users.query.get(current_user.user_id)
+        
+        if team_leader and requester: 
+            try:
+                msg = Message(
+                    subject = "Join Request Rejected",
+                    recipients = [requester.email],
+                    body = (
+                        f"Hello {requester.username},\n\n"
+                        f"Your request to join the team has been rejected.\n\n"
+                        f"Best regards,\n{team_leader.username}"
+                    ),
+                    html=(
+                        f"<p>Hello {requester.username},</p>"
+                        f"<p>Your request to join the team has been rejected.</p>"
+                        f"<p>Best regards,<br><b>{team_leader.username}</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not sent!")
 
         return success_response("Join request rejected successfully", status=200)
 
@@ -288,9 +404,11 @@ def add_wishlist_competition():
 
         if current_team is None:
             return error_response("Team not found", status=404)
+        
+        competition = Competition.query.get(req["competition_id"])
 
-        if current_team.competition_id is not None:
-            return error_response("Each team only allowed to join 1 competition", status=500)
+        if competition.date < now_jakarta():
+            return error_response("Cannot join a competition that has already started / expired", status=400)
         
         current_team.competition_id = req["competition_id"]
 
