@@ -1,6 +1,5 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
-from web3 import Web3
 import time
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -9,18 +8,12 @@ from app.models import Competition, TeamInvitation, TeamJoin, Teams, Users
 from app.routes.generic import get_current_user_object, now_jakarta
 from flask_mail import Message
 import threading
+from requests import post
 from app.routes.generic import send_async_email
 from app.utils.response import success_response, error_response
 
 team_bp = Blueprint('team', __name__, url_prefix="/team")
 
-w3 = Web3(Web3.HTTPProvider(os.environ.get("WEB3_PROVIDER")))
-MINER_ADDRESS = os.environ.get("MINER_ADDRESS")
-MINER_PRIVATE_KEY = os.environ.get("MINER_PRIVATE_KEY")
-CONTRACT_ADDRESS = "0xYourDeployedContractAddress"
-CONTRACT_ABI = [...]
-
-contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
 
 @team_bp.route("/get-list-team-user-request", methods=["POST"])
 def get_list_team_user_request():
@@ -179,38 +172,37 @@ def finalize_team():
             return error_response("Only the leader can finalize", status=406)
 
         # Handle proof image
-        proof_file = request.files.get("proof_txn")
+        proof_file = request.files.get("proof_image")
         if not proof_file:
             return error_response("Proof image required", status=400)
 
         filename = f"team{team_id}_{int(time.time())}_{secure_filename(proof_file.filename)}"
-        path = os.path.join(current_app.root_path, "uploads/prooftxn", filename)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        proof_file.save(path)
+        save_dir = os.path.join(current_app.root_path, "uploads/prooftxn")
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
+        proof_file.save(save_path)
 
-        # Blockchain finalize
-        nonce = w3.eth.get_transaction_count(MINER_ADDRESS)
-        txn = contract.functions.finalizeTeam(int(team_id)).buildTransaction({
-            "from": MINER_ADDRESS,  # Or leader's wallet if custodial
-            "nonce": nonce,
-            "gas": 100000,
-            "gasPrice": w3.eth.gas_price,
-        })
-        signed = w3.eth.account.sign_transaction(txn, MINER_PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        BLOCKCHAIN_API = os.environ.get("BLOCKCHAIN_API_URL", "http://localhost:5000/finalize")
 
-        # Save in DB
+        resp = post(BLOCKCHAIN_API, json={"teamId": int(team_id)})
+        if resp.status_code != 200:
+            return error_response(f"Blockchain error: {resp.json().get('error')}", status=500)
+        
+        data = resp.json()
+        tx_hash = data.get("txHash")
+
         team.is_finalized = True
-        team.txn_hash = receipt.transactionHash.hex()
+        team.txn_hash = tx_hash
         team.proof_txn_path = f"uploads/prooftxn/{filename}"
         team.date_updated = now_jakarta()
+
         db.session.commit()
 
-        return success_response("Team finalized on-chain", {
-            "txn_hash": receipt.transactionHash.hex()
-        })
-        
+        return success_response("Team finalized successfully on-chain", data={
+            "team_name": team.team_name,
+            "txn_hash": tx_hash,
+            "proof_path": f"uploads/prooftxn/{filename}",}, status=200)
+    
     except Exception as e:
         return error_response(f"Error finalizing team: {str(e)}", status=500)
     
