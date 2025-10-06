@@ -8,3 +8,5 @@ pyjwt
 numpy
 Flask-Mail
 pytz
+web3
+requests

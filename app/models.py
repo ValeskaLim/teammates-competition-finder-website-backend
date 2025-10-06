@@ -60,7 +60,7 @@ class Competition(db.Model):
 
     competition_id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(300), nullable=False, unique=True)
-    date = db.Column(db.DateTime, nullable=False)
+    date = db.Column(db.DateTime(timezone=True), nullable=False)
     status = db.Column(db.String(3), nullable=False)
     description = db.Column(db.String(4000), nullable=False)
     category = db.Column(db.String(100), nullable=False)
@@ -95,9 +95,12 @@ class Teams(db.Model):
     team_id = db.Column(db.Integer, primary_key=True)
     member_id = db.Column(db.String(200), nullable=False)
     team_name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(500), nullable=True)
+    notes = db.Column(db.String(500), nullable=True)
     competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"), nullable=True)
     leader_id = db.Column(db.Integer)
     is_finalized = db.Column(db.Boolean, default=False, nullable=False)
+    txn_hash = db.Column(db.String(66), nullable=True)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
@@ -109,6 +112,8 @@ class Teams(db.Model):
             "team_id": self.team_id,
             "member_id": self.member_id,
             "team_name": self.team_name,
+            "description": self.description,
+            "notes": self.notes,
             "competition_id": self.competition_id,
             "leader_id": self.leader_id,
             "is_finalized": self.is_finalized,
@@ -190,4 +195,19 @@ class Skills(db.Model):
         return {
             "skill_code": self.skill_code,
             "skill_name": self.skill_name
+        }
+    
+class CompetitionCategory(db.Model):
+    __tablename__ = "competition_category"
+
+    competition_category_id = db.Column(db.Integer, primary_key=True)
+    competition_category_code = db.Column(db.String(50), nullable=False)
+    competition_category_name = db.Column(db.String(100), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
+
+    def to_dict(self):
+        return {
+            "category_code": self.competition_category_code,
+            "category_name": self.competition_category_name
         }

@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, send_from_directory
 from datetime import datetime
 from app.extensions import db
-from app.models import Competition, TeamInvitation, Teams, Users
+from app.models import Competition, TeamInvitation, Teams, Users, CompetitionCategory
 from app.routes.generic import MAX_CONTENT_LENGTH, UPLOAD_FOLDER, allowed_file, get_current_user_object
 from app.utils.response import success_response, error_response
 from werkzeug.utils import secure_filename
@@ -19,6 +19,15 @@ def get_all_competition():
 
     except Exception as e:
         return error_response(f"Error fetch competitions: {str(e)}", status=500)
+    
+@competition_bp.route("/get-all-categories", methods=["POST"])
+def get_all_categories():
+    try:
+        categories = CompetitionCategory.query.all()
+
+        return success_response("Categories retrieved successfully", data=[c.to_dict() for c in categories], status=200)
+    except Exception as e:
+        return error_response(f"Error fetch categories: {str(e)}", status=500)
 
 @competition_bp.route("/get-existing-competition", methods=["POST"])
 def get_existing_competition():
@@ -75,7 +84,9 @@ def get_participant_by_id():
                 "is_finalized": team.is_finalized,
                 "leader_id": team.leader_id,
                 "leader_name": leader_name,
-                "members": member_list
+                "members": member_list,
+                "notes": team.notes,
+                "is_full": len(member_list) >= Competition.query.get(data['competition_id']).max_member if Competition.query.get(data['competition_id']) else False
             })
 
         return success_response("Participants retrieved successfully", data=results, status=200)
