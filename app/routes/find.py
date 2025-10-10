@@ -1,8 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.models import Users, Teams
 from app.routes.generic import get_current_user_object, check_is_already_have_team
-from app import similarity
-from app.similarity import normalize_user, cosine_similarity, filter_available_user
 from app.utils.response import success_response, error_response
 
 find_bp = Blueprint('find', __name__, url_prefix="/find")
