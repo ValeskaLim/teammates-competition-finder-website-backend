@@ -177,12 +177,12 @@ def finalize_team():
             return error_response("Proof image required", status=400)
 
         filename = f"team{team_id}_{int(time.time())}_{secure_filename(proof_file.filename)}"
-        save_dir = os.path.join(current_app.root_path, "uploads/prooftxn")
+        save_dir = os.path.join("/app", "uploads/proof_txn")
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, filename)
         proof_file.save(save_path)
 
-        BLOCKCHAIN_API = os.environ.get("BLOCKCHAIN_API_URL", "http://localhost:5000/finalize")
+        BLOCKCHAIN_API = os.environ.get("BLOCKCHAIN_API_URL")
 
         resp = post(BLOCKCHAIN_API, json={"teamId": int(team_id)})
         if resp.status_code != 200:
@@ -193,7 +193,6 @@ def finalize_team():
 
         team.is_finalized = True
         team.txn_hash = tx_hash
-        team.proof_txn_path = f"uploads/prooftxn/{filename}"
         team.date_updated = now_jakarta()
 
         db.session.commit()
@@ -201,7 +200,7 @@ def finalize_team():
         return success_response("Team finalized successfully on-chain", data={
             "team_name": team.team_name,
             "txn_hash": tx_hash,
-            "proof_path": f"uploads/prooftxn/{filename}",}, status=200)
+            "proof_path": f"uploads/proof_txn/{filename}",}, status=200)
     
     except Exception as e:
         return error_response(f"Error finalizing team: {str(e)}", status=500)
