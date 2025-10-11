@@ -100,7 +100,6 @@ class Teams(db.Model):
     competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"), nullable=True)
     leader_id = db.Column(db.Integer)
     is_finalized = db.Column(db.Boolean, default=False, nullable=False)
-    txn_hash = db.Column(db.String(66), nullable=True)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
@@ -210,4 +209,31 @@ class CompetitionCategory(db.Model):
         return {
             "category_code": self.competition_category_code,
             "category_name": self.competition_category_name
+        }
+        
+class ProofTransaction(db.Model):
+    __tablename__ = "proof_transaction"
+
+    proof_transaction_id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.team_id"))
+    competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"))
+    txn_hash = db.Column(db.String(66), nullable=False)
+    txn_hash_path = db.Column(db.String(255), nullable=True)
+    proof_image_path = db.Column(db.String(255), nullable=True)
+    block_number = db.Column(db.String(30), nullable=False)
+    status = db.Column(db.String(30), nullable=False)
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True))
+
+    def __repr__(self):
+        return f"<ProofTransaction {self.proof_transaction_id}>"
+
+    def to_dict(self):
+        return {
+            "proof_transaction_id": self.proof_transaction_id,
+            "team_id": self.team_id,
+            "competition_id": self.competition_id,
+            "txn_hash": self.txn_hash,
+            "block_number": self.block_number,
+            "status": self.status
         }
