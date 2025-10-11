@@ -277,10 +277,6 @@ def edit_competition():
     
 @competition_bp.route("/uploads/<filename>", methods=['GET'])
 def get_uploaded_file(filename):
-    """
-    Serve competition poster files.
-    """
-    print("Serving file:", os.path.join(UPLOAD_FOLDER, filename), flush=True)
     try:
         return send_from_directory(UPLOAD_FOLDER, filename)
     except Exception as e:

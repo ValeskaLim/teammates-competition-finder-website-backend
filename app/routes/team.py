@@ -4,7 +4,7 @@ import time
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from app.extensions import db
-from app.models import Competition, TeamInvitation, TeamJoin, Teams, Users
+from app.models import Competition, ProofTransaction, TeamInvitation, TeamJoin, Teams, Users
 from app.routes.generic import get_current_user_object, now_jakarta
 from flask_mail import Message
 import threading
@@ -190,11 +190,25 @@ def finalize_team():
         
         data = resp.json()
         tx_hash = data.get("txHash")
+        txn_hash_name = data.get("fileName")
+        block_number = data.get("blockNumber")
 
         team.is_finalized = True
-        team.txn_hash = tx_hash
         team.date_updated = now_jakarta()
 
+        proof_txn = ProofTransaction(
+            team_id=team.team_id,
+            competition_id=team.competition_id,
+            block_number=block_number,
+            txn_hash=tx_hash,
+            txn_hash_path=txn_hash_name,
+            status=data.get("status"),
+            date_created=now_jakarta(),
+            date_updated=now_jakarta(),
+            proof_image_path=filename
+        )
+
+        db.session.add(proof_txn)
         db.session.commit()
 
         return success_response("Team finalized successfully on-chain", data={
