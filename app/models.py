@@ -133,7 +133,7 @@ class TeamInvitation(db.Model):
     invitee_id = db.Column(db.Integer, db.ForeignKey("users.user_id"))
     status = db.Column(db.String(30), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=True))
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
         return f"<TeamInvitation {self.team_invitation_id}>"
@@ -162,7 +162,7 @@ class TeamJoin(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey("teams.team_id"))
     status = db.Column(db.String(30), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=True))
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
         return f"<TeamJoin {self.team_join_id}>"
@@ -218,12 +218,12 @@ class ProofTransaction(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey("teams.team_id"))
     competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"))
     txn_hash = db.Column(db.String(66), nullable=False)
-    txn_hash_path = db.Column(db.String(255), nullable=True)
-    proof_image_path = db.Column(db.String(255), nullable=True)
+    txn_hash_path = db.Column(db.String(255), nullable=False)
+    proof_image_path = db.Column(db.String(255), nullable=False)
     block_number = db.Column(db.String(30), nullable=False)
     status = db.Column(db.String(30), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
-    date_updated = db.Column(db.DateTime(timezone=True))
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
         return f"<ProofTransaction {self.proof_transaction_id}>"
