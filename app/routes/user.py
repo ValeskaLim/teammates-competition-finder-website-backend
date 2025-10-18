@@ -729,9 +729,7 @@ def verify_email():
             return error_response("Invalid token", status=500)
             
         if user.token_expiration < now_jakarta():
-            user.token = None
-            user.token_expiration = None
-            
+            db.session.delete(user)
             db.session.commit()
             
             return error_response("Token expired and has been invalidated", status=500)
@@ -904,6 +902,9 @@ def validate_token():
             return error_response("Invalid token", status=500)
             
         if user.token_expiration < now_jakarta():
+            # user.token = None
+            # user.token_expiration = None
+            # db.session.commit()
             return error_response("Token expired", status=500)
         
         return success_response("Token is valid", status=200)

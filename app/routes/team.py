@@ -387,7 +387,8 @@ def get_all_pending_request():
                     "email": user.email,
                     "semester": user.semester,
                     "field_of_preference": user.field_of_preference,
-                    "status": pending.status
+                    "status": pending.status,
+                    "portfolio": user.portfolio,
                 })
 
         return success_response("Pending requests retrieved successfully", data=results, status=200)
