@@ -1,4 +1,4 @@
-from flask import Blueprint, send_from_directory
+from flask import Blueprint, send_from_directory, request
 from app.models import ProofTransaction, Teams, Users, Competition
 from app.routes.generic import UPLOAD_FOLDER
 from app.utils.response import success_response, error_response
@@ -38,3 +38,25 @@ def get_uploaded_file(filename):
         return send_from_directory("/app/uploads/proof_txn", filename)
     except Exception as e:
         return error_response(f"File not found: {str(e)}", status=404)
+    
+@proof_transaction_bp.route("/get-proof-transaction", methods=['POST'])
+def get_proof_transaction_by_team_id():
+    try:
+        data = request.get_json()
+        team_id = data.get("team_id")
+        query = ProofTransaction.query
+        
+        txn = query.filter(ProofTransaction.team_id == team_id).first()
+        
+        if not txn:
+            return error_response("No proof transaction found for the given team ID", status=404)
+        
+        custom_txn = {
+            "txn_hash_path": txn.txn_hash_path,
+            "proof_image_path": txn.proof_image_path,
+        }
+
+        return success_response("Proof transaction retrieved successfully", data=custom_txn, status=200)
+
+    except Exception as e:
+        return error_response(f"Error fetching proof transaction: {str(e)}", status=500)

@@ -195,7 +195,7 @@ def finalize_team():
 
         team.is_finalized = True
         team.date_updated = now_jakarta()
-
+        
         proof_txn = ProofTransaction(
             team_id=team.team_id,
             competition_id=team.competition_id,
@@ -207,6 +207,16 @@ def finalize_team():
             date_updated=now_jakarta(),
             proof_image_path=filename
         )
+        
+        list_request_user = TeamJoin.query.filter(TeamJoin.team_id == team.team_id, TeamJoin.status == "P").all()
+        for request_user in list_request_user:
+            request_user.status = "C"
+            request_user.date_updated = now_jakarta()
+            
+        list_invited_user = TeamInvitation.query.filter(TeamInvitation.inviter_id == team.leader_id, TeamInvitation.status == "P").all()
+        for invitation in list_invited_user:
+            invitation.status = "C"
+            invitation.date_updated = now_jakarta()
 
         db.session.add(proof_txn)
         db.session.commit()
