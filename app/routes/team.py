@@ -161,7 +161,7 @@ def finalize_team():
     try:
         team_id = request.form.get("team_id")
         if not team_id:
-            return error_response("team_id required", status=400)
+            return error_response("Team Id required", status=400)
 
         team = Teams.query.filter(Teams.team_id == int(team_id)).first()
         if team is None:
@@ -288,6 +288,7 @@ def request_join_team():
 def accept_join_request():
     try:
         req = request.get_json()
+        current_user = get_current_user_object()
         query = TeamJoin.query
         team_query = Teams.query
 
@@ -305,6 +306,18 @@ def accept_join_request():
         
         member_ids = team.member_id.split(",") if team.member_id else []
         
+        team_competition = Competition.query.filter(
+            Competition.competition_id == team.competition_id
+        ).first()
+        
+        member_length = 0
+        for member_id in member_ids:
+            if member_id.strip().isdigit():
+                member_length += 1
+
+        if team_competition.max_member == member_length:
+            return error_response("Team is already at maximum capacity", status=400)
+
         if str(req['user_id']) in member_ids:
             return error_response("User is already a member of the team", status=400)
         
@@ -316,6 +329,34 @@ def accept_join_request():
         join_request.date_updated = now_jakarta()
 
         db.session.commit()
+        
+        candidate = Users.query.filter(
+            Users.user_id == req['user_id']
+        ).first()
+        
+        if candidate and candidate.email:
+            try:
+                msg = Message(
+                    subject = "Invitation Accepted!",
+                    recipients = [candidate.email],
+                    body = (
+                        f"Hello {candidate.username},\n\n"
+                        f"Good news! {current_user.username} has accepted your request to join their team.\n\n"
+                        f"You are now part of the team. Check the Teammates List to see your team members.\n\n"
+                        f"Best regards,\nYour Team"
+                    ),
+                    html=(
+                        f"<p>Hello {candidate.username},</p>"
+                        f"<p>Good news! <b>{current_user.username}</b> has accepted your request to join their team.</p>"
+                        f"<p>You are now part of the team. Check <b>Teammates List</b> to see your team members.</p>"
+                        f"<p>Best regards,<br><b>Your Team</b></p>"
+                    )
+                )
+
+                threading.Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+
+            except Exception as mail_error:
+                print("Email not send!")
 
         return success_response("Join request accepted successfully", status=200)
 

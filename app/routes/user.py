@@ -4,7 +4,7 @@ import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from datetime import datetime, timedelta
-from app.models import Skills, Users, Teams, TeamInvitation
+from app.models import Skills, Users, Teams, TeamInvitation, Competition
 from app.extensions import db
 from flask_mail import Message
 import threading
@@ -413,9 +413,6 @@ def accept_invites():
                 "success": False,
                 "message": "Cannot accept invites with status Active"
             }), 500
-        
-        team_invitation.status = "A"
-        team_invitation.date_updated = now_jakarta()
 
         get_inviter_team = Teams.query.filter(
             Teams.member_id.ilike(f"%{req['user_id']}%")
@@ -426,8 +423,28 @@ def accept_invites():
                 "success": False,
                 "message": "Team not found"
             }), 404
+            
+        if get_inviter_team.is_finalized:
+            return error_response("Cannot accept invitation. Team is already finalized.", status=500)
+        
+        inviter_team_competition = Competition.query.filter(
+            Competition.competition_id == get_inviter_team.competition_id
+        ).first()
+        
+        if inviter_team_competition.max_member == member_length:
+            return error_response("Cannot accept invitation. Team has reached maximum member limit.", status=500)
+
+        member_length = 0
+        members = []
+        for member_id in get_inviter_team.member_id.split(","):
+            if member_id.strip().isdigit():
+                members.append(int(member_id))
+                member_length += 1
         
         get_inviter_team.member_id += f",{current_user.user_id}"
+        
+        team_invitation.status = "A"
+        team_invitation.date_updated = now_jakarta()
 
         db.session.commit()
 
