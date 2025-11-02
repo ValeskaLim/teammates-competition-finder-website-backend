@@ -3,6 +3,7 @@ import os
 import time
 from werkzeug.utils import secure_filename
 from datetime import datetime
+from sqlalchemy import or_
 from app.extensions import db
 from app.models import Competition, ProofTransaction, TeamInvitation, TeamJoin, Teams, Users
 from app.routes.generic import get_current_user_object, now_jakarta
@@ -70,7 +71,12 @@ def check_any_competitions_joined():
         query = Teams.query
 
         current_team = query.filter(
-            Teams.member_id.ilike(f"%{current_user_id}%")
+            or_(
+                Teams.member_id == str(current_user.user_id),
+                Teams.member_id.ilike(f"{current_user.user_id},%"),
+                Teams.member_id.ilike(f"%,{current_user.user_id},%"), 
+                Teams.member_id.ilike(f"%,{current_user.user_id}")
+            )
         ).first()
 
         if current_team is None or current_team.competition_id is None:
@@ -456,7 +462,12 @@ def add_wishlist_competition():
         query = Teams.query
 
         current_team = query.filter(
-            Teams.member_id.ilike(f"%{current_user_id}%")
+            or_(
+                Teams.member_id == str(current_user.user_id),
+                Teams.member_id.ilike(f"{current_user.user_id},%"),
+                Teams.member_id.ilike(f"%,{current_user.user_id},%"), 
+                Teams.member_id.ilike(f"%,{current_user.user_id}")
+            )
         ).first()
 
         if current_team is None:

@@ -558,7 +558,12 @@ def check_is_have_team():
         query = Teams.query
 
         is_have_team = query.filter(
-            Teams.member_id.ilike(f"%{current_user.user_id}%")
+            or_(
+                Teams.member_id == str(current_user.user_id),
+                Teams.member_id.ilike(f"{current_user.user_id},%"),
+                Teams.member_id.ilike(f"%,{current_user.user_id},%"), 
+                Teams.member_id.ilike(f"%,{current_user.user_id}")
+            )
         ).first()
 
         if is_have_team is None:
