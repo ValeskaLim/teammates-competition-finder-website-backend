@@ -431,15 +431,15 @@ def accept_invites():
             Competition.competition_id == get_inviter_team.competition_id
         ).first()
         
-        if inviter_team_competition.max_member == member_length:
-            return error_response("Cannot accept invitation. Team has reached maximum member limit.", status=500)
-
         member_length = 0
         members = []
         for member_id in get_inviter_team.member_id.split(","):
             if member_id.strip().isdigit():
                 members.append(int(member_id))
                 member_length += 1
+        
+        if inviter_team_competition.max_member == member_length:
+            return error_response("Cannot accept invitation. Team has reached maximum member limit.", status=500)
         
         get_inviter_team.member_id += f",{current_user.user_id}"
         
