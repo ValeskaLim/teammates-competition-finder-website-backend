@@ -24,7 +24,7 @@ services:
       - .env
     ports:
         # For local only
-      - "127.0.0.1:5002:5002"
+      - "5002:5002"
     depends_on:
       - db
     volumes:
