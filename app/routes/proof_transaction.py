@@ -46,7 +46,7 @@ def get_proof_transaction_by_team_id():
         team_id = data.get("team_id")
         query = ProofTransaction.query
         
-        txn = query.filter(ProofTransaction.team_id == team_id).first()
+        txn = query.filter(ProofTransaction.team_id == team_id).order_by(ProofTransaction.date_created.desc()).first()
         
         if not txn:
             return error_response("No proof transaction found for the given team ID", status=404)

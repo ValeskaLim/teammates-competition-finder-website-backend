@@ -12,6 +12,7 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.routes.generic import send_async_email, check_is_already_have_team, now_jakarta
 from app.utils.response import success_response, error_response
+from app.commonconstant import BASE_URL
 
 user_bp = Blueprint('user', __name__, url_prefix="/user")
 
@@ -249,7 +250,7 @@ def login():
             httponly=True,
             secure=True,
             samesite="None",
-            max_age=60 * 60,
+            max_age=3 * 60 * 60,
         )
 
         return res
@@ -682,7 +683,7 @@ def create_user():
         db.session.commit()
         
         # Send verification email
-        verification_link = f"http://localhost:5173/verify-email/{verification_token}"
+        verification_link = f"{BASE_URL}/verify-email/{verification_token}"
         try:
             msg = Message(
                 subject="Verify Your Email",
@@ -880,7 +881,7 @@ def reset_password():
 
         db.session.commit()
 
-        reset_link = f"http://localhost:5173/reset-password-final/{reset_token}"
+        reset_link = f"{BASE_URL}/reset-password-final/{reset_token}"
         try:
             msg = Message(
                 subject="Reset Your Password",

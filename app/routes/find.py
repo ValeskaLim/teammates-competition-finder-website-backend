@@ -25,7 +25,7 @@ def filter_users_by_skill():
                 member_ids = [int(x) for x in team.member_id.split(",") if x.strip().isdigit()]
                 team_users.update(member_ids)
 
-        eligible_users = [u for u in users if u.user_id not in team_users and u.user_id != current_user.user_id]
+        eligible_users = [u for u in users if u.user_id not in team_users and u.user_id != current_user.user_id and u.is_verified]
         
         filtered = []
         for u in eligible_users:
