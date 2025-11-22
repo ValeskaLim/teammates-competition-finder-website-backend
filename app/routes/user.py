@@ -4,7 +4,7 @@ import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from datetime import datetime, timedelta
-from app.models import Skills, Users, Teams, TeamInvitation, Competition
+from app.models import Skills, Users, Teams, TeamInvitation, Competition, TeamJoin
 from app.extensions import db
 from flask_mail import Message
 import threading
@@ -398,6 +398,7 @@ def accept_invites():
         current_user = get_current_user_object()
         req = request.get_json()
         query = TeamInvitation.query
+        request_join = TeamJoin.query
 
         team_invitation = query.filter(
             TeamInvitation.inviter_id == req["user_id"], TeamInvitation.status == "P", TeamInvitation.invitee_id == current_user.user_id
@@ -414,6 +415,14 @@ def accept_invites():
                 "success": False,
                 "message": "Cannot accept invites with status Active"
             }), 500
+            
+        requests = request_join.filter(
+            (TeamJoin.user_id == req["user_id"]) & (TeamJoin.status == "P")
+        ).first()
+        
+        if requests:
+            requests.status = "C"
+            requests.date_updated = now_jakarta()
 
         get_inviter_team = Teams.query.filter(
             Teams.member_id.ilike(f"%{req['user_id']}%")

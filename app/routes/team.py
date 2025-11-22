@@ -316,6 +316,7 @@ def accept_join_request():
         current_user = get_current_user_object()
         query = TeamJoin.query
         team_query = Teams.query
+        team_invitation = TeamInvitation.query
 
         join_request = query.filter(
             (TeamJoin.team_id == req['team_id']) & (TeamJoin.user_id == req['user_id']) & (TeamJoin.status == "P")
@@ -334,6 +335,15 @@ def accept_join_request():
         team_competition = Competition.query.filter(
             Competition.competition_id == team.competition_id
         ).first()
+        
+        # Cancel any pending invitations to this user
+        invitations = team_invitation.filter(
+            (TeamInvitation.invitee_id == req['user_id']) & (TeamInvitation.status == "P")
+        ).first()
+        
+        if invitations:
+            invitations.status = "C"
+            invitations.date_updated = now_jakarta()
         
         member_length = 0
         for member_id in member_ids:
