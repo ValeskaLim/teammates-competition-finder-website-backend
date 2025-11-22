@@ -15,6 +15,9 @@ def get_all_transactions():
 
         results = []
         for txn in transactions:
+            comp = Competition.query.filter(
+                Competition.competition_id == txn.competition_id
+            ).first()
             results.append({
                 "proof_transaction_id": txn.proof_transaction_id,
                 "txn_hash": txn.txn_hash,
@@ -23,7 +26,7 @@ def get_all_transactions():
                 "txn_hash_path": txn.txn_hash_path,
                 "status": txn.status,
                 "block_number": txn.block_number,
-                "competition_name": Competition.query.filter(Competition.competition_id == txn.competition_id).first().title,
+                "competition_name": comp.title if comp else None,
             })
 
         return success_response("Transactions retrieved successfully", data=results, status=200)

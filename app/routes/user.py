@@ -214,7 +214,7 @@ def login():
         if not is_user_exist.is_verified:
             return jsonify({
                 "success": False,
-                "message": "Please verify your email before logging in"
+                "message": "Please verify your account using the link that we sent to your email before logging in"
             }), 401
 
         session["user_id"] = is_user_exist.user_id
@@ -327,13 +327,13 @@ def invite_user():
                     body = (
                         f"Hello {invitee.username},\n\n"
                         f"{current_user.username} has invited you to join their team.\n\n"
-                        f"Please log in to accept or decline the invitation.\n\n"
+                        f"Please log in and navigate to Find to accept or decline the invitation.\n\n"
                         f"Best regards,\nYour Team"
                     ),
                     html=(
                         f"<p>Hello {invitee.username},</p>"
                         f"<p><b>{current_user.username}</b> has invited you to join their team.</p>"
-                        f"<p>Please log in to accept or decline the invitation.</p>"
+                        f"<p>Please log in and navigate to <b>Find</b> to accept or decline the invitation.</p>"
                         f"<p>Best regards,<br><b>Your Team</b></p>"
                     )
                 )

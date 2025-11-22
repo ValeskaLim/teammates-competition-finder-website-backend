@@ -106,6 +106,8 @@ def create_team():
     try:
         req = request.get_json()
         query = Teams.query
+        team_invitation = TeamInvitation.query
+        request_join = TeamJoin.query
 
         check_is_exist = query.filter(
             (Teams.team_name == req['team_name']) | (Teams.leader_id == req['leader_id'])
@@ -113,6 +115,23 @@ def create_team():
 
         if check_is_exist is not None:
             return error_response("Team / user already exist", status=406)
+        
+        # Cancel invitation & request to this user
+        invitations = team_invitation.filter(
+            (TeamInvitation.invitee_id == req['leader_id']) & (TeamInvitation.status == "P")
+        ).first()
+        
+        if invitations:
+            invitations.status = "C"
+            invitations.date_updated = now_jakarta()
+            
+        requests = request_join.filter(
+            (TeamJoin.user_id == req['leader_id']) & (TeamJoin.status == "P")
+        ).first()
+        
+        if requests:
+            requests.status = "C"
+            requests.date_updated = now_jakarta()
 
         new_team = Teams(
             member_id = str(req["leader_id"]),
