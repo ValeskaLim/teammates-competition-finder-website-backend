@@ -108,6 +108,9 @@ def create_team():
         query = Teams.query
         team_invitation = TeamInvitation.query
         request_join = TeamJoin.query
+        
+        if req["team_name"] == None or req["team_name"].strip() == "":
+            return error_response("Invalid team name", status=406)
 
         check_is_exist = query.filter(
             (Teams.team_name == req['team_name']) | (Teams.leader_id == req['leader_id'])
