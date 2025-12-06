@@ -4,7 +4,7 @@ import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from datetime import datetime, timedelta
-from app.models import Skills, Users, Teams, TeamInvitation, Competition, TeamJoin
+from app.models import Skills, Users, Teams, TeamInvitation, Competition, TeamJoin, UserSkillsMapping
 from app.extensions import db
 from flask_mail import Message
 import threading
@@ -38,10 +38,14 @@ def get_current_user_object():
     
 @user_bp.route("/get-current-user", methods=["POST"])
 def get_current_user():
-
+    user_skill_query = UserSkillsMapping.query
     user = get_current_user_object()
     if not user:
         return jsonify({"user": None}), 200
+    
+    user_skills = user_skill_query.filter(
+        UserSkillsMapping.user_id == user.user_id
+    ).all()
 
     return jsonify({
         "user": {
@@ -52,10 +56,10 @@ def get_current_user():
             "gender": user.gender,
             "semester": user.semester,
             "role": user.role,
-            "field_of_preference": user.field_of_preference,
             "major": user.major,
             "is_verified": user.is_verified,
             "portfolio": user.portfolio,
+            "skills": [skill.to_dict() for skill in user_skills]
         }
     }), 200
 
@@ -92,10 +96,15 @@ def get_user_by_id():
     try:
         req = request.get_json()
         query = Users.query
+        user_skill_query = UserSkillsMapping.query
 
         user = query.filter(
             Users.user_id == req["user_id"]
         ).first()
+        
+        user_skills = user_skill_query.filter(
+            UserSkillsMapping.user_id == req["user_id"]
+        ).all()
 
         if user is None:
             return jsonify({
@@ -105,7 +114,10 @@ def get_user_by_id():
         
         return jsonify({
             "success": True,
-            "data": user.to_dict()
+            "data": {
+                "user": user.to_dict(),
+                "skills": [skill.to_dict() for skill in user_skills]
+            }
         }), 200
 
     except Exception as e:
@@ -118,7 +130,6 @@ def get_user_by_id():
 def get_invites_user():
     try:
         current_user = get_current_user_object()
-
         query = TeamInvitation.query
 
         invitation_list = query.filter(
@@ -126,16 +137,52 @@ def get_invites_user():
         ).all()
 
         if invitation_list is None or invitation_list == []:
-            return jsonify({
-                "success": False,
-                "message": "Invitation not found"
-            }), 200
+            return error_response("Invitation not found", status=200)
+        
+        result = []
+        for inv in invitation_list:
+            inviter_user = Users.query.get(inv.inviter_id)
+            inviter_skill_query = (
+                db.session.query(Skills.skill_id, Skills.skill_name)
+                .join(UserSkillsMapping, Skills.skill_id == UserSkillsMapping.skill_id)
+                .filter(UserSkillsMapping.user_id == inviter_user.user_id)
+                .all()
+            )
 
-        return jsonify({
-            "success": True,
-            "data": [user.to_dict() for user in invitation_list]
-        }), 200
+            inviter_skills = [
+                {"skill_id": s.skill_id, "skill_name": s.skill_name}
+                for s in inviter_skill_query
+            ]
+            invitee_user = current_user
+            mapped = {
+                "inviter_id": inv.inviter_id,
+                "invitee_id": inv.invitee_id,
+                "inviter": {
+                    "user_id": inviter_user.user_id,
+                    "username": inviter_user.username,
+                    "fullname": inviter_user.fullname,
+                    "email": inviter_user.email,
+                    "gender": inviter_user.gender,
+                    "major": inviter_user.major,
+                    "portfolio": inviter_user.portfolio,
+                    "semester": inviter_user.semester,
+                    "skills": inviter_skills
+                },
+                "invitee": {
+                    "user_id": invitee_user.user_id,
+                    "username": invitee_user.username,
+                    "fullname": invitee_user.fullname,
+                    "email": invitee_user.email,
+                    "gender": invitee_user.gender,
+                    "major": invitee_user.major,
+                    "portfolio": invitee_user.portfolio,
+                    "semester": invitee_user.semester,
+                }
+            }
+            result.append(mapped)
 
+        return success_response("Invites retrieved successfully", data=result)
+    
     except Exception as e:
         return (
             jsonify({"success": False, "message": f"Error fetching users: {str(e)}"}),
@@ -146,24 +193,60 @@ def get_invites_user():
 def get_invitees_user():
     try:
         user = get_current_user_object()
-        query = TeamInvitation.query
         
-        invited_user = query.filter(
-            TeamInvitation.inviter_id == user.user_id, TeamInvitation.status == "P"
+        invitations = TeamInvitation.query.filter_by(
+            inviter_id=user.user_id, 
+            status="P"
         ).all()
+        if not invitations:
+            return error_response("Invitation not found", status=200)
 
-        
-        if invited_user is None or invited_user == []:
-            return jsonify({
-                "success": True, 
-                "message": "Invitation not found"
-            }), 200
-        
+        result = []
+
+        for inv in invitations:
+            invitee_user = Users.query.get(inv.invitee_id)
+            invitee_skills_query = (
+                db.session.query(Skills.skill_id, Skills.skill_name)
+                .join(UserSkillsMapping, Skills.skill_id == UserSkillsMapping.skill_id)
+                .filter(UserSkillsMapping.user_id == invitee_user.user_id)
+                .all()
+            )
+            invitee_skills = [
+                {"skill_id": s.skill_id, "skill_name": s.skill_name}
+                for s in invitee_skills_query
+            ]
+            inviter_user = Users.query.get(inv.inviter_id)
+            mapped_invitation = {
+                "invitee_id": inv.invitee_id,
+                "inviter_id": inv.inviter_id,
+                "invitee": {
+                    "user_id": invitee_user.user_id,
+                    "username": invitee_user.username,
+                    "fullname": invitee_user.fullname,
+                    "email": invitee_user.email,
+                    "gender": invitee_user.gender,
+                    "major": invitee_user.major,
+                    "portfolio": invitee_user.portfolio,
+                    "semester": invitee_user.semester,
+                    "skills": invitee_skills
+                },
+                "invites": {
+                    "user_id": inviter_user.user_id,
+                    "username": inviter_user.username,
+                    "fullname": inviter_user.fullname,
+                    "email": inviter_user.email,
+                    "gender": inviter_user.gender,
+                    "major": inviter_user.major,
+                    "portfolio": inviter_user.portfolio,
+                    "semester": inviter_user.semester,
+                }
+            }
+            result.append(mapped_invitation)
+            
         return jsonify({
             "success": True,
-            "data": [user.to_dict() for user in invited_user]
+            "data": result
         }), 200
-        
         
     except Exception as e:
         return (
@@ -680,7 +763,6 @@ def create_user():
             gender=data["gender"],
             semester=data["semester"],
             major="Computer Science",
-            field_of_preference=data["field_of_preference"],
             date_created=now_jakarta(),
             date_updated=now_jakarta(),
             token=verification_token,
@@ -689,6 +771,17 @@ def create_user():
         )
 
         db.session.add(new_user)
+        db.session.commit()
+        
+        new_skill = data["field_of_preference"].split(",")
+        for skill_id in new_skill:
+            new_skill_mapping = UserSkillsMapping(
+                user_id=new_user.user_id,
+                skill_id=int(skill_id),
+                date_created=now_jakarta(),
+                date_updated=now_jakarta()
+            )
+            db.session.add(new_skill_mapping)
         db.session.commit()
         
         # Send verification email
@@ -785,6 +878,7 @@ def edit_user():
         data = request.get_json()
         print(data, flush=True)
         query = Users.query
+        user_skill_query = UserSkillsMapping.query
 
         required_fields = ["username", "email", "field_of_preference", "major"]
         
@@ -828,10 +922,22 @@ def edit_user():
         user.email = data["email"],
         user.gender = data["gender"],
         user.semester = data["semester"],
-        user.field_of_preference = data["field_of_preference"]
         user.major = data["major"]
         user.portfolio = data.get("portfolio", None)
         user.date_updated=now_jakarta()
+
+        db.session.commit()
+        user_skill_query.filter_by(user_id=data["user_id"]).delete()
+        
+        new_skill = data["field_of_preference"].split(",")
+        for skill_id in new_skill:
+            new_skill_mapping = UserSkillsMapping(
+                user_id = data["user_id"],
+                skill_id = int(skill_id),
+                date_created = now_jakarta(),
+                date_updated = now_jakarta()
+            )
+            db.session.add(new_skill_mapping)
 
         db.session.commit()
 

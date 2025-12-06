@@ -1,5 +1,6 @@
+from app.extensions import db
 from flask import Blueprint, request, jsonify
-from app.models import Users, Teams
+from app.models import Users, Teams, UserSkillsMapping, Skills
 from app.routes.generic import get_current_user_object, check_is_already_have_team
 from app.utils.response import success_response, error_response
 
@@ -9,7 +10,7 @@ find_bp = Blueprint('find', __name__, url_prefix="/find")
 def filter_users_by_skill():
     try:
         req = request.get_json()
-        skills  = req.get("skills", [])
+        required_skills = req.get("skills", [])
         current_user = get_current_user_object()
         users = Users.query.all()
         team_query = Teams.query
@@ -29,15 +30,26 @@ def filter_users_by_skill():
         
         filtered = []
         for u in eligible_users:
-            user_skills = u.field_of_preference.split(",") if u.field_of_preference else []
-            if all(skill in user_skills for skill in skills):
+            skills = (
+                db.session.query(Skills.skill_id, Skills.skill_name)
+                .join(UserSkillsMapping, UserSkillsMapping.skill_id == Skills.skill_id)
+                .filter(UserSkillsMapping.user_id == u.user_id)
+                .all()
+            )
+            skill_list = [
+                {"skill_id": s.skill_id, "skill_name": s.skill_name}
+                for s in skills
+            ]
+            required_skill_ids = {int(s) for s in required_skills}
+            user_skill_ids = {int(s["skill_id"]) for s in skill_list}
+            if required_skill_ids.issubset(user_skill_ids):
                 filtered.append({
                     "user_id": u.user_id,
                     "username": u.username,
                     "fullname": u.fullname,
                     "email": u.email,
                     "semester": u.semester,
-                    "field_of_preference": u.field_of_preference,
+                    "skills": skill_list,
                 })
 
         return success_response("Filtered users retrieved", data=filtered)
@@ -64,6 +76,18 @@ def get_all_users():
                 team_users.update(member_ids)
 
         filtered_users = [u for u in users if u.user_id not in team_users and u.user_id != current_user.user_id]
+        
+        for u in filtered_users:
+            skills = (
+                db.session.query(Skills.skill_id, Skills.skill_name)
+                .join(UserSkillsMapping, UserSkillsMapping.skill_id == Skills.skill_id)
+                .filter(UserSkillsMapping.user_id == u.user_id)
+                .all()
+            )
+            skill_list = [
+                {"skill_id": s.skill_id, "skill_name": s.skill_name}
+                for s in skills
+            ]
 
         user_data = [{
             "user_id": u.user_id,
@@ -71,8 +95,8 @@ def get_all_users():
             "fullname": u.fullname,
             "email": u.email,
             "semester": u.semester,
-            "field_of_preference": u.field_of_preference,
-            "portfolio": u.portfolio
+            "portfolio": u.portfolio,
+            "skills": skill_list
         } for u in filtered_users]
 
         return success_response("All users retrieved", data=user_data)

@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request, send_from_directory
 from datetime import datetime
+from app.routes.generic import now_jakarta
 from app.extensions import db
-from app.models import Competition, TeamInvitation, Teams, Users, CompetitionCategory
+from app.models import Competition, TeamInvitation, Teams, Users, CompetitionCategory, CompetitionCategoryMapping
 from app.routes.generic import MAX_CONTENT_LENGTH, UPLOAD_FOLDER, allowed_file, get_current_user_object
 from app.utils.response import success_response, error_response
 from werkzeug.utils import secure_filename
@@ -15,7 +16,23 @@ def get_all_competition():
     try:
         competitions = Competition.query.all()
 
-        return success_response("Competitions retrieved successfully", data=[c.to_dict() for c in competitions], status=200)
+        results = []
+        for competition in competitions:
+            category_map = CompetitionCategoryMapping.query.filter_by(competition_id=competition.competition_id).first()
+            category = CompetitionCategory.query.filter_by(competition_category_id=category_map.competition_category_id).first()
+            results.append({
+                "competition_id": competition.competition_id,
+                "title": competition.title,
+                "date": competition.date.strftime("%Y-%m-%d") if competition.date else None,
+                "status": competition.status,
+                "description": competition.description,
+                "min_member": competition.min_member,
+                "max_member": competition.max_member,
+                "poster": competition.poster,
+                "original_url": competition.original_url,
+                "category": category.competition_category_name
+            })
+        return success_response("Competitions retrieved successfully", data=results, status=200)
 
     except Exception as e:
         return error_response(f"Error fetch competitions: {str(e)}", status=500)
@@ -49,11 +66,28 @@ def get_competititon_by_id():
         query = Competition.query
 
         competition = query.filter(Competition.competition_id == data['id']).first()
-
+        
         if competition is None:
             return error_response("Competition not found", status=404)
+        
+        competition_category = CompetitionCategoryMapping.query.filter_by(competition_id=data['id']).first()
 
-        return success_response("Competition retrieved successfully", data=competition.to_dict(), status=200)
+        return jsonify({
+            "success": True,
+            "message": "Competition retrieved successfully",
+            "data": {
+                "competition_id": competition.competition_id,
+                "title": competition.title,
+                "date": competition.date.strftime("%Y-%m-%d") if competition.date else None,
+                "status": competition.status,
+                "description": competition.description,
+                "min_member": competition.min_member,
+                "max_member": competition.max_member,
+                "poster": competition.poster,
+                "original_url": competition.original_url,
+                "category_id": competition_category.competition_category_id
+            }
+        }), 200
 
     except Exception as e:
         return error_response(f"Error fetching competition: {str(e)}", status=500)
@@ -150,16 +184,24 @@ def add_competition():
             date=date,
             status=status,
             description=description,
-            category=category,
             min_member=min_member,
             max_member=max_member,
             poster=filename,
             original_url=original_url,
-            date_created=datetime.now(),
-            date_updated=datetime.now()
+            date_created=now_jakarta(),
+            date_updated=now_jakarta()
         )
 
         db.session.add(new_competition)
+        db.session.commit()
+        
+        new_competition_category_map = CompetitionCategoryMapping(
+            competition_id=new_competition.competition_id,
+            competition_category_id=int(category),
+            date_created=now_jakarta(),
+            date_updated=now_jakarta()
+        ) 
+        db.session.add(new_competition_category_map)
         db.session.commit()
 
         return success_response("Competition created successfully", data=new_competition.to_dict(), status=200)
@@ -196,7 +238,7 @@ def edit_competition():
         date = request.form.get("date")
         status = request.form.get("status")
         description = request.form.get("description")
-        category = request.form.get("category")
+        category_id = request.form.get("category")
         min_member = request.form.get("min_member")
         max_member = request.form.get("max_member")
         poster = request.files.get("poster")
@@ -248,16 +290,18 @@ def edit_competition():
             poster.save(file_path)
 
             current_competition.poster = filename
+        competition_category_map = CompetitionCategoryMapping.query.filter_by(competition_id=competition_id).first()
 
         current_competition.title = title
         current_competition.date = date
         current_competition.status = status
-        current_competition.category = category
         current_competition.min_member = min_member
         current_competition.max_member = max_member
         current_competition.description = description
-        current_competition.date_updated = datetime.now()
+        current_competition.date_updated = now_jakarta()
         current_competition.original_url = original_url
+        competition_category_map.competition_category_id = int(category_id)
+        competition_category_map.date_updated = now_jakarta()
 
         with db.session.no_autoflush:
             existing_competititon = query.filter(

@@ -15,7 +15,6 @@ class Users(db.Model):
     gender = db.Column(db.String(1), nullable=False)
     semester = db.Column(db.Integer, nullable=False)
     major = db.Column(db.String(30), nullable=False)
-    field_of_preference = db.Column(db.String(500), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
     token = db.Column(db.String(255), nullable=True)
@@ -50,7 +49,6 @@ class Users(db.Model):
             "gender": self.gender,
             "semester": self.semester,
             "major": self.major,
-            "field_of_preference": self.field_of_preference,
             "portfolio": self.portfolio,
         }
 
@@ -63,7 +61,6 @@ class Competition(db.Model):
     date = db.Column(db.DateTime(timezone=True), nullable=False)
     status = db.Column(db.String(3), nullable=False)
     description = db.Column(db.String(4000), nullable=False)
-    category = db.Column(db.String(100), nullable=False)
     min_member = db.Column(db.Integer, nullable=False)
     max_member = db.Column(db.Integer, nullable=False)
     original_url = db.Column(db.Text, nullable=True)
@@ -81,7 +78,6 @@ class Competition(db.Model):
             "date": self.date.strftime('%Y-%m-%d') if self.date else None,
             "status": self.status,
             "description": self.description,
-            "category": self.category,
             "min_member": self.min_member,
             "max_member": self.max_member,
             "original_url": self.original_url if self.original_url else None,
@@ -181,6 +177,25 @@ class TeamJoin(db.Model):
             )
         }
         
+class UserSkillsMapping(db.Model):
+    __tablename__ = "user_skills_mapping"
+
+    user_skill_mapping_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"))
+    skill_id = db.Column(db.Integer, db.ForeignKey("skills.skill_id"))
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
+    skill = db.relationship("Skills", backref="skill_mappings")
+
+
+    def to_dict(self):
+        return {
+            "user_id": self.user_id,
+            "skill_id": self.skill_id,
+            "skill_name": self.skill.skill_name if self.skill else None
+
+        }
+        
 class Skills(db.Model):
     __tablename__ = "skills"
 
@@ -192,8 +207,24 @@ class Skills(db.Model):
 
     def to_dict(self):
         return {
+            "skill_id": self.skill_id,
             "skill_code": self.skill_code,
             "skill_name": self.skill_name
+        }
+        
+class CompetitionCategoryMapping(db.Model):
+    __tablename__ = "competition_category_mapping"
+
+    competition_category_mapping_id = db.Column(db.Integer, primary_key=True)
+    competition_id = db.Column(db.Integer, db.ForeignKey("competition.competition_id"))
+    competition_category_id = db.Column(db.Integer, db.ForeignKey("competition_category.competition_category_id"))
+    date_created = db.Column(db.DateTime(timezone=True), nullable=False)
+    date_updated = db.Column(db.DateTime(timezone=True), nullable=False)
+
+    def to_dict(self):
+        return {
+            "competition_id": self.competition_id,
+            "competition_category_id": self.competition_category_id
         }
     
 class CompetitionCategory(db.Model):
@@ -207,8 +238,8 @@ class CompetitionCategory(db.Model):
 
     def to_dict(self):
         return {
-            "category_code": self.competition_category_code,
-            "category_name": self.competition_category_name
+            "competition_category_id": self.competition_category_id,
+            "competition_category_name": self.competition_category_name
         }
         
 class ProofTransaction(db.Model):

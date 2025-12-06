@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 from sqlalchemy import or_
 from app.extensions import db
-from app.models import Competition, ProofTransaction, TeamInvitation, TeamJoin, Teams, Users
+from app.models import Competition, ProofTransaction, TeamInvitation, TeamJoin, Teams, Users, UserSkillsMapping
 from app.routes.generic import get_current_user_object, now_jakarta
 from flask_mail import Message
 import threading
@@ -456,6 +456,7 @@ def get_all_pending_request():
         req = request.get_json()
         query = TeamJoin.query
         team_query = Teams.query
+        user_skill_query = UserSkillsMapping.query
 
         team = team_query.filter(Teams.team_id == req['team_id']).first()
         
@@ -464,6 +465,10 @@ def get_all_pending_request():
         
         pending_requests = query.filter(
             (TeamJoin.team_id == team.team_id) & (TeamJoin.status == "P")
+        ).all()
+        
+        user_skills = user_skill_query.filter(
+            UserSkillsMapping.user_id.in_([pending.user_id for pending in pending_requests])
         ).all()
 
         results = []
@@ -475,7 +480,7 @@ def get_all_pending_request():
                     "fullname": user.fullname,
                     "email": user.email,
                     "semester": user.semester,
-                    "field_of_preference": user.field_of_preference,
+                    "skills": [skill.to_dict() for skill in user_skills if skill.user_id == user.user_id],
                     "status": pending.status,
                     "portfolio": user.portfolio,
                 })
